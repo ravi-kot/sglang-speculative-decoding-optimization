@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimizing Speculative Decoding on an RTX 5070</title>
+<meta name="description" content="How I made SGLang&#x27;s NEXTN speculative decoding for Qwen3.5-2B up to 2.1x faster on an 8 GB laptop GPU without touching the BF16 target model.">
+<meta name="author" content="Ravi Kothari">
+<meta name="theme-color" content="#faf9f6">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><a href="index.html">Ravi Kothari</a><span>GPU inference notes</span></header>
+<main>
+<article>
+<header class="post">
+<h1>Optimizing Speculative Decoding on an RTX 5070</h1>
+<p class="subtitle">CUDA, quantized drafting, split-KV attention, and the limits of memory bandwidth.</p>
+<p class="meta">October 27, 2026 · RTX 5070 Laptop GPU (SM120, 8 GB) · SGLang 0.5.21 · Qwen3.5-2B BF16</p>
+</header>
+<p>An 8 GB laptop GPU is not where anyone expects fast LLM inference. I wanted to find out how far single-request speculative decoding could be pushed on one anyway, without touching the BF16 target model. I followed each speculative round from SGLang's scheduler down to individual CUDA kernels, and then went after what the traces showed. I made drafting cheaper, and I gave the GPU more parallel work while the target verifies the draft's tokens. The target never changed: it still checks every proposed token in BF16, so the whole speedup comes from the machinery around it. Some of that machinery is my own code, and some is upstream work I enabled and combined. I separate the two in <a href="#what-i-built-and-what-i-reused">What I built and what I reused</a>.</p>
+<div class="stat-grid">
+<div class="stat"><p class="stat-num">+93.3%</p><p class="stat-label">Code, 1K prompt<br>113.2 to 222.0 tok/s</p></div>
+<div class="stat"><p class="stat-num">+109.0%</p><p class="stat-label">Code, 4K prompt<br>93.7 to 196.4 tok/s</p></div>
+<div class="stat"><p class="stat-num">+63.8%</p><p class="stat-label">MT-Bench writing<br>95.8 to 157.8 tok/s</p></div>
+</div>
+<div class="callout">
+<p><strong>Improvement:</strong> Quantized drafting, split-KV attention, deeper proposals, and a smaller draft vocabulary nearly doubled code throughput while the target model remained BF16 and continued to verify every committed token.</p>
+</div>
+<div class="top-table">
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>TPOT, stock / mine</th>
+<th>tok/s, stock / mine</th>
+<th>Tokens per round, stock / mine</th>
+<th>Paired gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Code, 1K prompt</td>
+<td>8.838 / <strong>4.504 ms</strong></td>
+<td>113.2 / <strong>222.0</strong></td>
+<td>2.48 / <strong>3.32</strong></td>
+<td><strong>+93.3%</strong></td>
+</tr>
+<tr>
+<td>Code, 4K prompt</td>
+<td>10.671 / <strong>5.091 ms</strong></td>
+<td>93.7 / <strong>196.4</strong></td>
+<td>2.42 / <strong>3.11</strong></td>
+<td><strong>+109.0%</strong></td>
+</tr>
+<tr>
+<td>MT-Bench writing</td>
+<td>10.439 / <strong>6.339 ms</strong></td>
+<td>95.8 / <strong>157.8</strong></td>
+<td>2.08 / <strong>2.62</strong></td>
+<td><strong>+63.8%</strong></td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<p class="result-scope"><strong>Scope:</strong> paired gains over stock SGLang at batch size 1, one request at a time, greedy decoding, thinking disabled. Code 1K is 6 coding-agent prompts, code 4K is 4, and MT-Bench is 4 first-turn writing prompts (<a href="#table-workloads">Table 2</a>). Code responses are technical explanations with some code, not only executable source. My correctness test found no statistically significant drop in top-1 agreement with the plain BF16 target, which stays at about 99%, as for stock (<a href="#correctness">Correctness</a>). <a class="result-link" href="#final-results">See the final benchmark results</a></p>
+<div class="evidence-key">
+<p><span class="tag meas">Measured</span> Recorded directly by a benchmark or profiler</p>
+<p><span class="tag est">Estimate</span> Calculated using measured inputs and stated assumptions</p>
+<p><span class="tag theo">Theoretical</span> A mathematical bound or hypothetical scenario, not an observed result</p>
+</div>
+<nav class="toc toc-inline" aria-label="Contents"><p class="toc-head">Contents</p><ol><li><a href="#the-problem">The Problem</a></li><li><a href="#building-a-baseline-i-could-trust">Building a baseline I could trust</a></li><li><a href="#the-trace-that-exposed-the-first-bottlenecks">The trace that exposed the first bottlenecks</a></li><li><a href="#the-draft-output-head">The draft output head</a></li><li><a href="#nsight-compute-profiling">Nsight Compute Profiling</a></li><li><a href="#split-kv-attention-for-verification">Split-KV attention for verification</a></li><li><a href="#int4-in-the-server-and-the-limit-it-ran-into">INT4 in the server, and the limit it ran into</a></li><li><a href="#replayssm-memory-for-deeper-drafts">ReplaySSM: memory for deeper drafts</a></li><li><a href="#choosing-the-speculative-depth">Choosing the speculative depth</a></li><li><a href="#shrinking-the-draft-vocabulary">Shrinking the draft vocabulary</a></li><li><a href="#two-smaller-changes-on-the-draft-side">Two smaller changes on the draft side</a></li><li><a href="#context-augmented-draft-vocabulary">Context-augmented draft vocabulary</a></li><li><a href="#approaching-the-memory-bandwidth-limit">Approaching the memory-bandwidth limit</a></li><li><a href="#experiments-i-did-not-keep">Experiments I did not keep</a></li><li><a href="#final-results">Final paired results</a></li><li><a href="#correctness">Correctness</a></li><li><a href="#where-the-investigation-goes-next">Where the investigation goes next</a></li><li><a href="#lessons-i-would-carry-forward">Lessons I would carry forward</a></li><li><a href="#methodology-notes">Methodology notes</a></li><li><a href="#evidence-code-and-references">Evidence, code and references</a></li></ol></nav>
+<h2 id="the-problem">The Problem</h2>
+<p>Qwen3.5 ships a small draft model inside its own checkpoint: one extra transformer layer trained for multi-token prediction (MTP), which SGLang runs under the name NEXTN. I wanted to understand that MTP path end to end, and to see how much SGLang's speculative decoding could gain from it on hardware I own.</p>
+<p>The machine is a laptop with an RTX 5070 Laptop GPU: Blackwell, compute capability 12.0 (SM120), 36 streaming multiprocessors (SMs), and 8 GB of GDDR7. It runs Windows 11, with SGLang inside WSL2 Ubuntu 24.04.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Engine</td>
+<td>SGLang 0.5.21, PyTorch 2.13 with CUDA 13.0, Triton 3.7.1</td>
+</tr>
+<tr>
+<td>Model</td>
+<td><a href="https://huggingface.co/Qwen/Qwen3.5-2B" target="_blank" rel="noopener noreferrer">Qwen3.5-2B</a>, BF16 weights, tied input and output embeddings</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>24 layers: 18 Gated DeltaNet (linear attention) and 6 full attention, plus one MTP draft layer</td>
+</tr>
+<tr>
+<td>Vocabulary and hidden size</td>
+<td>248,320 tokens, 2,048</td>
+</tr>
+<tr>
+<td>Decoding</td>
+<td>Batch size 1, greedy, NEXTN speculative decoding</td>
+</tr>
+<tr>
+<td>Profilers</td>
+<td>PyTorch profiler (CUPTI kernel traces), Nsight Compute</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-setup"><span class="cap-num">Table 1.</span> Hardware and inference configuration used in every experiment</p>
+<p>When I say &quot;server&quot; in this article, I mean the SGLang inference engine running locally inside WSL. It loads Qwen3.5-2B onto the GPU and manages token generation for each request. Nothing runs in the cloud.</p>
+<p>The goal was more committed output tokens per second for a single request. I did not quantize or replace the target model. The BF16 target verifies every proposed token before it is committed, so the user still receives the target model's output.</p>
+<p>I kept the batch size at 1: one user, one request, one response streaming back. That is the interactive case, and the hardest one for a GPU. With a single sequence there is nothing to share the cost of reading the model's weights, so every generated token pays for a full pass over all of them.</p>
+<p>Speculative decoding attacks exactly that cost. It works in rounds:</p>
+<ol>
+<li>The draft proposes a few tokens, one cheap step per token</li>
+<li>The target checks all of them in a single forward pass</li>
+<li>The target keeps the longest prefix it agrees with and adds one token of its own</li>
+</ol>
+<p>When the draft is usually right, one expensive target pass commits several tokens instead of one. In NEXTN, each draft step runs the MTP layer once and then projects its output onto the full vocabulary to pick the next token. That projection turns out to matter a great deal.</p>
+<p><a href="#figure-setup">Figure 1</a> shows the whole experiment in one place: what goes into the server, what happens in each round, and what comes out.</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-setup.svg" alt="Experiment setup. Fixed prompts enter the SGLang server, which runs locally in WSL2 on the RTX 5070. Inside it, each round loops through draft, target verify, accept and commit, and the CPU scheduler, above a strip for the 8 GB of GPU memory holding weights, KV cache and recurrent state. The server feeds a benchmark, which feeds the results, and a profiler trace. Badges mark finding 1 on the draft, finding 2 on verification, finding 3 on GPU memory and finding 4 on the scheduler."></div>
+<figcaption id="figure-setup"><span class="cap-num">Figure 1.</span> Experiment setup: fixed prompts, the speculative round inside the local SGLang server, and the measurements that come out of it</figcaption>
+</figure>
+<p class="read-guide"><strong>Read this figure:</strong> follow the arrows inside the dashed box clockwise. That loop is one speculative round, and it repeats until the response is complete. Every experiment in this article changes something inside the box and leaves the prompts and the measurement path untouched. The dark badges mark where the four problems from the first profile live (<a href="#finding-1">finding 1</a> in the draft, <a href="#finding-2">2</a> in verification, <a href="#finding-3">3</a> in GPU memory, <a href="#finding-4">4</a> in the scheduler). I come back to them after the baseline is in place.</p>
+<ul>
+<li><strong>Fixed prompts:</strong> saved once as token IDs and hashed, so every variant sees identical input (<a href="#building-a-baseline-i-could-trust">Building a baseline I could trust</a>)</li>
+<li><strong>Draft (MTP):</strong> the MTP layer plus the full-vocabulary output head, run once per proposed token (<a href="#the-draft-output-head">The draft output head</a>)</li>
+<li><strong>Target verify:</strong> the BF16 target checks every draft token in a single forward pass (<a href="#split-kv-attention-for-verification">Split-KV attention for verification</a>)</li>
+<li><strong>Accept and commit:</strong> keeps the longest prefix the target agrees with, plus one token of the target's own (<a href="#correctness">Correctness</a>)</li>
+<li><strong>Scheduler (CPU):</strong> assigns KV slots, does the bookkeeping and launches the next round (<a href="#approaching-the-memory-bandwidth-limit">Approaching the memory-bandwidth limit</a>)</li>
+<li><strong>GPU memory (8 GB):</strong> shared by the weights, the KV cache and the recurrent state (<a href="#replayssm-memory-for-deeper-drafts">ReplaySSM: memory for deeper drafts</a>)</li>
+<li><strong>Benchmark:</strong> records TPOT, tokens per round, clocks and power for every request (<a href="#requests-and-pairing">Requests and pairing</a>)</li>
+<li><strong>Results:</strong> paired gain with a 95% interval, plus a correctness test against the plain target (<a href="#final-results">Final paired results</a>)</li>
+<li><strong>Profiler trace:</strong> CUPTI kernel traces, grouped into speculative rounds by my analyzer (<a href="#the-trace-that-exposed-the-first-bottlenecks">The trace that exposed the first bottlenecks</a>)</li>
+</ul>
+<h2 id="building-a-baseline-i-could-trust">Building a baseline I could trust</h2>
+<p>Before optimizing anything, I needed a fixed workload: the same prompts, at the same lengths, for every variant, so that any change in speed came from the code and not from the input. I modeled the code prompts on the kind of request a coding assistant typically receives, a task plus the source files it has opened, and took the chat prompts from MT-Bench. I also needed a strong stock reference, and a way to cope with a laptop GPU whose clocks move with temperature and power.</p>
+<h3 id="fixed-prompts-stored-as-token-ids">Fixed prompts, stored as token IDs</h3>
+<p>I built every prompt once and saved the token IDs (<a href="code/data/build_prompts.py">build_prompts.py</a>). Retokenizing on each run would let a template or tokenizer change slip into a comparison unnoticed. The builder applies Qwen's chat template with thinking disabled, records the tokenizer's hash and the template's token pieces, and stores a SHA-256 of every prompt set. A verify mode refuses to reuse the prompts with a different tokenizer or template.</p>
+<p>The code prompts imitate a coding agent that has opened files. Each one is a single user turn that says &quot;You are a coding agent working in the SGLang repository&quot;, followed by SGLang 0.5.21 source files formatted as <code>[tool:read_file]</code> outputs, then one of four tasks:</p>
+<ul>
+<li>Find the most likely bug and write the corrected function</li>
+<li>Trace the main call path and write pytest tests</li>
+<li>Refactor the longest function</li>
+<li>Propose an input-validation patch as a unified diff</li>
+</ul>
+<p>The file context is truncated so that each complete prompt, chat template included, is exactly 1,024 or 4,096 tokens. Fixed lengths matter because attention cost grows with context. Two variants must see the same context length, or their attention work differs.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Input</th>
+<th>Prompts measured</th>
+<th>Output</th>
+<th>What the responses contain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Code 1K</td>
+<td>Exactly 1,024 tokens: source files and a coding task</td>
+<td>6</td>
+<td>256 tokens, every response hit the limit</td>
+<td>Technical analysis in Markdown, with code blocks for the refactor and patch tasks</td>
+</tr>
+<tr>
+<td>Code 4K</td>
+<td>Exactly 4,096 tokens, same construction</td>
+<td>4</td>
+<td>256 tokens, every response hit the limit</td>
+<td>Same mix</td>
+</tr>
+<tr>
+<td>MT-Bench</td>
+<td>First-turn questions at natural length</td>
+<td>4</td>
+<td>Up to 256 tokens</td>
+<td>Writing tasks: a travel blog post, two emails, an outline</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-workloads"><span class="cap-num">Table 2.</span> The three benchmark workloads; &quot;1K&quot; and &quot;4K&quot; refer to input context length, not to the generated output</p>
+<p>The chat prompts are the first four <a href="https://github.com/lm-sys/FastChat/tree/main/fastchat/llm_judge" target="_blank" rel="noopener noreferrer">MT-Bench</a> questions, all from its writing category. That is a narrow slice of chat, and I keep it in mind when interpreting the chat results.</p>
+<h3 id="requests-and-pairing">Requests and pairing</h3>
+<p>Every variant runs in a fresh SGLang server process. Requests go one at a time (concurrency 1, batch size 1), after two warm-up requests (<a href="code/scripts/bench.py">bench.py</a>).</p>
+<p>TPOT, the time per output token, excludes the time to the first token:</p>
+<div class="eq"><math display="block"><mrow><mtext>TPOT</mtext><mo>=</mo><mfrac><mrow><msub><mi>t</mi><mtext>end-to-end</mtext></msub><mo>−</mo><msub><mi>t</mi><mtext>first token</mtext></msub></mrow><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="eq-label">N = output tokens</span></div>
+<p>Decode throughput follows directly:</p>
+<div class="eq"><math display="block"><mrow><mi>R</mi><mspace width="0.25em"/><mtext>[tokens/s]</mtext><mo>=</mo><mfrac><mn>1000</mn><mrow><mtext>TPOT</mtext><mspace width="0.25em"/><mtext>[ms]</mtext></mrow></mfrac></mrow></math></div>
+<p>The laptop's enforced power limit moved between 70 and 79 W during runs. Absolute TPOT drifted by several percent between sessions as a result. So every comparison in this article is paired: stock and candidate run in the same session, on the same prompts, in two passes with opposite orders. A bench sampler records SM clock, memory clock, power and the power-cap state for every server. Passes with clock drops are re-run instead of averaged in.</p>
+<p>The gain is computed from per-prompt ratios:</p>
+<div class="eq"><math display="block"><mrow><mtext>gain</mtext><mo>=</mo><mrow><mo>(</mo><mfrac><mn>1</mn><mi>r</mi></mfrac><mo>−</mo><mn>1</mn><mo>)</mo></mrow><mo>×</mo><mn>100%</mn><mspace width="1.2em"/><mi>r</mi><mo>=</mo><msub><mtext>median</mtext><mi>i</mi></msub><mrow><mo>(</mo><mfrac><msub><mtext>TPOT</mtext><mrow><mi>i</mi><mo>,</mo><mtext>new</mtext></mrow></msub><msub><mtext>TPOT</mtext><mrow><mi>i</mi><mo>,</mo><mtext>stock</mtext></mrow></msub></mfrac><mo>)</mo></mrow></mrow></math></div>
+<p>I report the median ratio with a bootstrap 95% interval (<a href="code/scripts/compare.py">compare.py</a>).</p>
+<p>With the measurement method fixed, the last piece was the stock baseline: SGLang 0.5.21 with Triton attention and two draft steps, which I call <strong>S2</strong>. I chose it because it was the fastest stock configuration I could find on this machine, not because it was the default:</p>
+<ul>
+<li><strong>Draft depth:</strong> the Qwen3.5 model card recommends three draft steps. On this GPU two steps were faster: three steps measured 1.06x slower on code and 1.10x slower on MT-Bench <a class="cite" href="data/ledger.html#L4" title="Ledger entry 4: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order rev, unprofiled)">L4</a>. Four and five steps did not start at all, because the KV cache no longer fit in 8 GB <a class="cite" href="data/ledger.html#L3" title="Ledger entry 3: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order fwd, profiled)">L3</a> <a class="cite" href="data/ledger.html#L5" title="Ledger entry 5: S5 fit probe on 8 GB">L5</a></li>
+<li><strong>Attention backend:</strong> SGLang's default on SM120 is FlashInfer, not Triton. Every FlashInfer configuration I tried was slower than Triton S2, by about 5% on code and 11% on MT-Bench <a class="cite" href="data/ledger.html#L12" title="Ledger entry 12: stock-default (FlashInfer) baseline re-establishment, pass 2">L12</a>. Its attention kernel was faster, but its CPU-side planning cost more than the kernel saved; I explain why in <a href="#flashinfer-faster-attention-slower-serving">FlashInfer: faster attention, slower serving</a></li>
+</ul>
+<p>S2 is the strongest stock configuration I found on this machine, not a claim about every GPU or setting. These are its numbers in the final benchmark session:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Stock S2 TPOT</th>
+<th>Stock S2 tok/s</th>
+<th>Tokens per round</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Code 1K</td>
+<td>8.838 ms</td>
+<td>113.2</td>
+<td>2.48</td>
+</tr>
+<tr>
+<td>Code 4K</td>
+<td>10.671 ms</td>
+<td>93.7</td>
+<td>2.42</td>
+</tr>
+<tr>
+<td>MT-Bench</td>
+<td>10.439 ms</td>
+<td>95.8</td>
+<td>2.08</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-stock"><span class="cap-num">Table 3.</span> Stock S2 in the final benchmark session; &quot;tokens per round&quot; counts committed tokens, including the target's own token</p>
+<h2 id="the-trace-that-exposed-the-first-bottlenecks">The trace that exposed the first bottlenecks</h2>
+<p>Stock S2 committed about 2.5 tokens per round (<a href="#table-stock">Table 3</a>). Before touching any code, I needed to know where a round's time went. I profiled the decode loop end to end and split every round into four parts, so I could optimize each one separately:</p>
+<ul>
+<li><strong>Drafting:</strong> proposing candidate tokens</li>
+<li><strong>Verification:</strong> checking them with the target</li>
+<li><strong>Bookkeeping:</strong> memory management and scheduler work</li>
+<li><strong>Idle:</strong> GPU time lost between useful kernels</li>
+</ul>
+<p>To get there, I recorded PyTorch profiler traces from SGLang. Under the hood these use NVIDIA's <a href="https://docs.nvidia.com/cupti/" target="_blank" rel="noopener noreferrer">CUPTI</a>, which timestamps every kernel the GPU executes and links it to the CPU call that launched it. SGLang runs the target-verify pass and the draft passes as CUDA graphs, so I wrote a small analyzer that groups kernels by the graph that launched them (<a href="code/profiling/analyze.py">analyze.py</a>). The largest graph is target verification, the others are drafting, and kernels outside any graph are eager bookkeeping. I counted the gaps in the merged kernel timeline as GPU idle time.</p>
+<p><a href="#figure-timeline">Figure 2</a> previews the whole project. The top lane is the stock round I started from. The bottom lane is the round after every change in this article, with five draft steps instead of two. For now, focus on the top lane: the sections that follow explain how each of its blocks shrank, and <a href="#choosing-the-speculative-depth">Choosing the speculative depth</a> explains why the final round drafts five tokens.</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-round-timeline.svg" alt="Timeline of one speculative round on code 1K. Stock SGLang: 20.4 ms, a long target-verify block followed by a long draft block. My implementation: 15.0 ms, a shorter verify block and a much shorter draft block."></div>
+<figcaption id="figure-timeline"><span class="cap-num">Figure 2.</span> GPU execution timeline of one speculative round before and after optimization, taken from CUPTI kernel traces on code 1K</figcaption>
+</figure>
+<p class="read-guide"><strong>Read this figure:</strong> each lane is one median round, drawn to the same time scale. Blue is the target verifying the draft's tokens, orange is the draft proposing them, dark gray is eager bookkeeping, and hatched gray is the GPU waiting for work. The top lane is stock SGLang with two draft steps <a class="cite" href="data/ledger.html#L3" title="Ledger entry 3: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order fwd, profiled)">L3</a>. The bottom lane is my modified SGLang implementation with five draft steps, as it stood at the end of the project <a class="cite" href="data/ledger.html#L55" title="Ledger entry 55: final: round timing of verified top config (profile only)">L55</a>. The label on the right divides the round time by the tokens it committed.</p>
+<p>The stock round, in numbers <a class="cite" href="data/ledger.html#L3" title="Ledger entry 3: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order fwd, profiled)">L3</a>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Part of the round</th>
+<th>Time per round</th>
+<th>Main kernels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Target verify, 3 tokens</td>
+<td>12.98 ms</td>
+<td>BF16 GEMMs 11.00 ms, attention 1.41 ms, recurrent-state update 0.27 ms</td>
+</tr>
+<tr>
+<td>Draft, extend pass and 1 step</td>
+<td>6.47 ms</td>
+<td>Full-vocabulary output head, 2 calls of 2.79 ms each</td>
+</tr>
+<tr>
+<td>Eager bookkeeping</td>
+<td>0.21 ms</td>
+<td>KV-slot assignment, copies</td>
+</tr>
+<tr>
+<td>GPU idle</td>
+<td>0.72 ms</td>
+<td>Waiting for the CPU scheduler</td>
+</tr>
+<tr>
+<td><strong>Round</strong></td>
+<td><strong>20.40 ms</strong></td>
+<td><strong>2.48 tokens, 8.24 ms per token</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-stockround"><span class="cap-num">Table 4.</span> Breakdown of the median stock round on code 1K; kernel totals over 30 rounds divided by 30 (<a href="data/profiler/analysis_20261024-204832-local_S2.txt">analysis</a>, <a href="data/profiler/launch_configs.txt">launch configurations</a>)</p>
+<p>The trace pointed at four problems, each in a different part of the round. I numbered them because the rest of the article works through them, and each later section links back here:</p>
+<ol>
+<li><span id="finding-1"></span><strong>The draft output head took about 27% of all GPU time.</strong> This one kernel, called twice per round, projects the draft's hidden state onto all 248,320 vocabulary rows. It cost more than the draft's whole transformer layer. Addressed in <a href="#the-draft-output-head">The draft output head</a> and <a href="#shrinking-the-draft-vocabulary">Shrinking the draft vocabulary</a></li>
+<li><span id="finding-2"></span><strong>Verification attention grew with context.</strong> It took 1.41 ms per round at 1K, but 4.44 ms at 4K <a class="cite" href="data/ledger.html#L19" title="Ledger entry 19: Triton verify attention vs context length (4K, fits S2 KV pool 5764)">L19</a>. At 1K it hardly mattered, but long prompts are where agent workloads live. Addressed in <a href="#split-kv-attention-for-verification">Split-KV attention for verification</a></li>
+<li><span id="finding-3"></span><strong>Memory limited how deep the draft could go.</strong> With three draft steps the KV pool held only 2,584 tokens, and 4K prompts were rejected <a class="cite" href="data/ledger.html#L3" title="Ledger entry 3: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order fwd, profiled)">L3</a>. Deeper drafting, the obvious way to commit more tokens per round, could not even be tested. Addressed in <a href="#replayssm-memory-for-deeper-drafts">ReplaySSM: memory for deeper drafts</a></li>
+<li><span id="finding-4"></span><strong>About 0.7 ms per round was GPU idle,</strong> with the GPU waiting for the CPU scheduler between rounds. That was real time, but only about 3.5% of the round. Quantified in <a href="#approaching-the-memory-bandwidth-limit">Approaching the memory-bandwidth limit</a></li>
+</ol>
+<p>I started with finding 1. The draft head was the largest single cost, and it had a property the others lacked: changing it could not change which tokens get committed. The target re-checks every proposed token with its own BF16 head, so the draft can afford to be approximate.</p>
+<h2 id="the-draft-output-head">The draft output head</h2>
+<p>The trace pointed at the draft output head first (<a href="#finding-1">finding 1</a>: 2.79 ms per call, twice per round, in <a href="#table-stockround">Table 4</a>), so I looked at the operation it performs and what made it expensive.</p>
+<p>The draft's last step multiplies its 2,048-wide hidden state by the output-head matrix: 248,320 rows by 2,048 columns. Qwen3.5 ties this matrix to the input embedding, and in BF16 it occupies 970 MiB, or 1.017 GB.</p>
+<p>At batch size 1 there is a single input row (M = 1). The operation is therefore a matrix-vector product. Every weight is loaded once and used for one multiply and one add, about one floating-point operation per byte. The GPU can do far more arithmetic per byte than that. So the kernel's time should be set by how fast the weights stream out of DRAM:</p>
+<div class="eq"><math display="block"><mrow><mi>t</mi><mo>≈</mo><mfrac><mtext>bytes</mtext><mtext>bandwidth</mtext></mfrac><mo>=</mo><mfrac><mtext>1.017 GB</mtext><mtext>346 GB/s</mtext></mfrac><mo>≈</mo><mtext>2.94 ms</mtext></mrow></math><span class="eq-label">measured: 2,939 µs</span></div>
+<p>The measured time matched that prediction. The draft runs this head once per draft step, and with two steps that is two full passes over 970 MiB every round.</p>
+<p>The way out was not to compute faster but to read less. The draft head only proposes tokens, and the target verifies each one with its own BF16 head. So the draft can use a smaller copy of the weights without changing which tokens get committed. Fewer bytes per weight should mean proportionally less time. The cost would show up elsewhere: a less precise draft head agrees less often with the target, and each disagreement shortens a round.</p>
+<h3 id="comparing-lower-precision-heads">Comparing lower-precision heads</h3>
+<p>To make the head read fewer bytes, I quantized it. These are post-training quantizations (PTQ): I converted the existing BF16 weights directly, with no retraining and no calibration data. FP8 uses one scale per output row, and INT4 one scale per group of 32 or 128 weights.</p>
+<p>I built a benchmark that runs each candidate head on 1,344 real draft hidden states against the real tied weight (<a href="code/profiling/head_bench.py">head_bench.py</a>). For each one I measured latency and how often its top choice agreed with the BF16 head.</p>
+<p>The candidates:</p>
+<ul>
+<li><strong>BF16:</strong> the original head, run by cuBLAS as a GEMV kernel</li>
+<li><strong>FP8 W8A8 on CUTLASS:</strong> 8-bit weights and 8-bit activations, through the GEMM path SGLang uses for FP8 linear layers</li>
+<li><strong>FP8 W8A16 on Marlin:</strong> 8-bit weights, BF16 activations, dequantized inside the kernel</li>
+<li><strong>INT4 W4A16 on Marlin:</strong> 4-bit weights with one scale per group of 32 or 128 values</li>
+</ul>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Head variant, isolated, M = 1</th>
+<th>Weights</th>
+<th>Time per call</th>
+<th>Effective bandwidth (DRAM)</th>
+<th>Top-1 agreement with BF16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BF16, cuBLAS GEMV</td>
+<td>970 MiB</td>
+<td>2,939 µs</td>
+<td>346 GB/s</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>FP8 W8A8, CUTLASS</td>
+<td>486 MiB</td>
+<td>1,595 µs</td>
+<td>320 GB/s</td>
+<td>98.1%</td>
+</tr>
+<tr>
+<td>FP8 W8A16, Marlin</td>
+<td>486 MiB</td>
+<td>1,515 µs</td>
+<td>336 GB/s</td>
+<td>98.2%</td>
+</tr>
+<tr>
+<td>INT4 W4A16, group 32, Marlin</td>
+<td>273 MiB</td>
+<td>815 µs</td>
+<td>351 GB/s</td>
+<td>95.6%</td>
+</tr>
+<tr>
+<td>INT4 W4A16, group 128, Marlin</td>
+<td>250 MiB</td>
+<td>745 µs</td>
+<td>352 GB/s</td>
+<td>93.8%</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-heads"><span class="cap-num">Table 5.</span> Isolated draft-head variants on the real weight and real draft inputs <a class="cite" href="data/ledger.html#L6" title="Ledger entry 6: draft-only FP8 tied lm_head copy (isolated projection)">L6</a> <a class="cite" href="data/ledger.html#L7" title="Ledger entry 7: draft-only FP8 tied lm_head copy (isolated projection)">L7</a> <a class="cite" href="data/ledger.html#L8" title="Ledger entry 8: draft-only FP8 tied lm_head copy (isolated projection)">L8</a></p>
+<p>Effective bandwidth here is DRAM bandwidth: weight bytes read from DRAM divided by time per call. Halving the bytes halved the time, and halving them again nearly halved it again. Every variant ran at roughly the same effective DRAM bandwidth, 320 to 352 GB/s. That pattern says the kernels were streaming weights at close to the memory system's limit, whatever their precision.</p>
+<p>Agreement moved the other way. FP8 kept 98.2% top-1 agreement. INT4 with group-32 scales fell to 95.6%, and coarser group-128 scales to 93.8%. Every point of agreement lost turns into rounds that stop early.</p>
+<p>The latencies told me FP8 helped, but not why Marlin beat CUTLASS when both read the same 486 MiB. I wanted to know whether these kernels were limited by memory bandwidth, by tensor-core work, or by too little parallel work.</p>
+<h2 id="nsight-compute-profiling">Nsight Compute Profiling</h2>
+<p><a href="#table-heads">Table 5</a> raised a question the latencies alone could not answer: why were the three head kernels so close to one bandwidth, and why did Marlin beat CUTLASS on the same bytes? I profiled the three main head kernels from that table with <a href="https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html" target="_blank" rel="noopener noreferrer">Nsight Compute</a>, using the same weights and input shapes as the benchmark <a class="cite" href="data/ledger.html#L6" title="Ledger entry 6: draft-only FP8 tied lm_head copy (isolated projection)">L6</a>. The counters explained the latency table and set the direction for the rest of the project.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Counter</th>
+<th>cuBLAS GEMV, BF16</th>
+<th>CUTLASS W8A8, FP8</th>
+<th>Marlin W8A16, FP8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Grid × block</td>
+<td>62,080 × 64</td>
+<td>1,940 × 384</td>
+<td>36 × 256</td>
+</tr>
+<tr>
+<td>Registers per thread</td>
+<td>164</td>
+<td>168</td>
+<td>98</td>
+</tr>
+<tr>
+<td>Shared memory per block</td>
+<td>1.3 KB</td>
+<td>76.8 KB</td>
+<td>102.4 KB</td>
+</tr>
+<tr>
+<td>Waves per SM</td>
+<td>287.4</td>
+<td>53.9</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Theoretical warp occupancy</td>
+<td>25%</td>
+<td>25%</td>
+<td>16.7%</td>
+</tr>
+<tr>
+<td>Achieved warp occupancy</td>
+<td>24.7%</td>
+<td>20.6%</td>
+<td>16.7%</td>
+</tr>
+<tr>
+<td>DRAM throughput, % of peak</td>
+<td><strong>98.3%</strong></td>
+<td><strong>98.0%</strong></td>
+<td><strong>97.0%</strong></td>
+</tr>
+<tr>
+<td>L2 traffic</td>
+<td>1.03 GB</td>
+<td>1.02 GB</td>
+<td>1.05 GB</td>
+</tr>
+<tr>
+<td>L2 hit rate</td>
+<td>0.8%</td>
+<td>49.9%</td>
+<td>51.4%</td>
+</tr>
+<tr>
+<td>Issue slots used</td>
+<td>9.9%</td>
+<td>7.4%</td>
+<td>5.6%</td>
+</tr>
+<tr>
+<td>Eligible warps per cycle</td>
+<td>0.11</td>
+<td>0.10</td>
+<td>0.06</td>
+</tr>
+<tr>
+<td>Largest stall reason, cycles per issue</td>
+<td>Long scoreboard, 19.4</td>
+<td>Math pipe throttle, 13.7</td>
+<td>Long scoreboard 18.5, barrier 12.2</td>
+</tr>
+<tr>
+<td>Duration under Nsight Compute</td>
+<td>3.60 ms</td>
+<td>1.81 ms</td>
+<td>1.83 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-ncu"><span class="cap-num">Table 6.</span> Nsight Compute counters for the three draft-head kernels, exported from the original report (<a href="data/profiler/head_ncu_metrics.csv">CSV</a>)</p>
+<p>The first row I looked at was DRAM throughput. All three kernels ran at 97 to 98% of peak, so they were already moving bytes close to the memory system's observed limit. With DRAM throughput already near that limit, increasing occupancy alone was unlikely to produce a meaningful improvement.</p>
+<p>Occupancy looked alarming at first: 17 to 25% of the possible warps, and a tenth of a warp eligible to issue per cycle. Here it did not appear to be the limit. Marlin had the lowest occupancy of the three, one 256-thread CTA per SM, and still reached 97% of peak DRAM throughput. A kernel needs enough memory requests in flight to cover DRAM latency, and Marlin's design keeps them in flight with asynchronous copies into shared memory rather than with many warps.</p>
+<p>The stall reasons pointed the same way. The GEMV and Marlin stalled mostly on long scoreboard, which is waiting for data from memory. Higher occupancy can sometimes hide more of that latency, even in memory-bound kernels, but with DRAM already at 97 to 98% of peak there was little bandwidth left for extra warps to use. This profile does not prove that no launch configuration could do better. It does show that reducing weight traffic was the highest-value change.</p>
+<p>CUTLASS was the odd one out. Its largest stall was math-pipe throttle, and it also needs a separate kernel to quantize the activations to FP8 before every call. My reading is that a tile-based GEMM wastes most of each tensor-core tile when only one row is real. I did not capture tensor-pipe counters, so that part is an interpretation rather than a measurement. What I did measure is consistent with it: CUTLASS read the same bytes as Marlin but spent more time doing it once the activation pass was included.</p>
+<p>Two cross-checks gave me confidence in the byte counts. This GPU did not expose a DRAM-bytes counter in my Nsight Compute version. <span class="tag est">Estimate</span> L2 traffic times the L2 miss rate approximates DRAM reads: 1.03 GB × 0.992 is about 1.02 GB for BF16, and 1.05 GB × 0.486 is about 0.51 GB for FP8 Marlin. Both match the weight sizes. Separately, tail effects were negligible: the GEMV ran 287 waves of CTAs and CUTLASS 54, so the last partial wave was a tiny fraction of either kernel. Durations under the profiler run longer than in the benchmark because Nsight Compute locks clocks, so I used it for ratios and stall mix, and CUDA-graph timing for latency.</p>
+<p>This profile became the central technical lesson of the project. Three kinds of &quot;slow kernel&quot; need three different fixes:</p>
+<ul>
+<li><strong>Memory-bandwidth-limited:</strong> DRAM is already near its limit, so the main lever is moving fewer bytes. The draft head was this case (<a href="#fp8-marlin-in-the-server">FP8 Marlin in the server</a>)</li>
+<li><strong>Not enough independent work:</strong> too few CTAs to occupy the GPU, so the fix is splitting the work into more pieces. Verification attention turned out to be this case (<a href="#split-kv-attention-for-verification">Split-KV attention for verification</a>)</li>
+<li><strong>A small-M GEMM with mismatched tiling:</strong> the hardware path suits large tiles, so the fix is a kernel designed for one row. The CUTLASS FP8 path at batch 1 was this case, and it came back in the draft layer (<a href="#two-smaller-changes-on-the-draft-side">Two smaller changes on the draft side</a>)</li>
+</ul>
+<h3 id="fp8-marlin-in-the-server">FP8 Marlin in the server</h3>
+<p>That settled the first change. Of the two FP8 kernels in <a href="#table-heads">Table 5</a>, Marlin was the faster one, and the profile explained why. I wrote a draft-only FP8 copy of the head with one scale per row, run by SGLang's Marlin W8A16 kernel. The original BF16 weight stays untouched, because the target still uses it for embedding lookups and verification.</p>
+<pre class="code"><code class="language-python"><span class="k">class</span><span class="w"> </span><span class="nc">Fp8MarlinDraftHead</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">chunk</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16384</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float8_e4m3fn</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">chunk</span><span class="p">):</span>  <span class="c1"># bounded temporaries: no full FP32 copy</span>
+                <span class="n">blk</span> <span class="o">=</span> <span class="n">weight</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="n">blk</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">FP8_MAX</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">)</span>
+                <span class="n">q</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">blk</span> <span class="o">/</span> <span class="n">s</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float8_e4m3fn</span><span class="p">)</span>
+                <span class="n">scale</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">s</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_size_per_partition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_size_per_partition</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="n">k</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orig_dtype</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="n">prepare_fp8_layer_for_marlin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size_k_first</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quant_method</span> <span class="o">=</span> <span class="n">Fp8MarlinDraftHeadMethod</span><span class="p">()</span>
+</code></pre>
+<p class="src">From <a href="code/patches/fp8_draft_head.diff">fp8_draft_head.diff</a>, file <code>srt/speculative/draft_lm_head_quant.py</code></p>
+<p>The object exposes a <code>quant_method.apply</code>, which SGLang's logits processor already knows how to call. A single hook in the speculative worker installs it before the draft CUDA graphs are captured. Everything is behind an environment variable. With it unset, my modified copy of SGLang ran at parity with stock <a class="cite" href="data/ledger.html#L13" title="Ledger entry 13: Stage1 functional: overlay parity (S2o) + FP8 draft head active in graph (S28)">L13</a>.</p>
+<p>In the server, the draft fell from 6.53 to 3.83 ms per round, and the round from 20.57 to 17.80 ms <a class="cite" href="data/ledger.html#L13" title="Ledger entry 13: Stage1 functional: overlay parity (S2o) + FP8 draft head active in graph (S28)">L13</a>. Paired against stock, that was <strong>+15.1% on code 1K and +18.2% on MT-Bench</strong> <a class="cite" href="data/ledger.html#L16" title="Ledger entry 16: Stage1 A/B pass 3 + allocator check (S38 intermittent slowdown)">L16</a>.</p>
+<p>INT4 was faster still in isolation, but its top-1 agreement was noticeably lower. I kept FP8 as the default and came back to INT4 later. The same idea, a quantized draft head for drafters that share the target's head, also appears in vLLM (<a href="https://github.com/vllm-project/vllm/pull/59973" target="_blank" rel="noopener noreferrer">vllm-project/vllm#59973</a>, by stecasta). My implementation for SGLang is independent. The FP8 and INT4 kernels are SGLang's Marlin kernels, derived from <a href="https://github.com/IST-DASLab/marlin" target="_blank" rel="noopener noreferrer">IST-DASLab's Marlin</a>.</p>
+<h2 id="split-kv-attention-for-verification">Split-KV attention for verification</h2>
+<p>With the draft head cheaper, the next problem was <a href="#finding-2">finding 2</a>: verification attention, which grew with the prompt. In the stock 1K round it took 1.41 ms (<a href="#table-stockround">Table 4</a>). At 4K context it took 4.44 ms per round <a class="cite" href="data/ledger.html#L19" title="Ledger entry 19: Triton verify attention vs context length (4K, fits S2 KV pool 5764)">L19</a>, roughly in proportion to the prompt, and the share of the round it occupied grew with it.</p>
+<p>Growth with context is expected, because attention has to read the whole KV cache. What caught my attention was how the work was launched. On the Triton backend, target verification uses SGLang's prefill attention kernel, <code>_fwd_kernel</code>. The CUPTI trace records its launch configuration: a grid of (1, 8, 1), with 256 threads, 128 registers per thread and 72 KB of shared memory per block (<a href="data/profiler/launch_configs.txt">launch configurations</a>).</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-splitkv-sms.svg" alt="Two rows of 36 squares, one per SM. Stock Triton attention gives work to 8 of 36 SMs with 8 CTAs and takes 740 microseconds per call. Split-KV launches 128 CTAs, enough to give work to all 36 SMs, and takes 46 plus 12.5 microseconds per call."></div>
+<figcaption id="figure-splitkv"><span class="cap-num">Figure 3.</span> Verification attention at 4K context: how many SMs each kernel launch can give work to, with measured kernel time per call</figcaption>
+</figure>
+<p class="read-guide"><strong>Read this figure:</strong> a grid of (1, 8, 1) creates eight cooperative thread arrays, or CTAs. A CTA is CUDA's name for a thread block, and one CTA runs on one SM at a time (<a href="https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/intro-to-cuda-cpp.html" target="_blank" rel="noopener noreferrer">CUDA programming model</a>). This GPU has 36 SMs. With only eight CTAs, the original kernel could give work to at most eight SMs; the other 28 had nothing from it. Split-KV divides the KV sequence into smaller independent pieces and launches 128 CTAs, enough to give every SM work. Each square shows scheduling opportunity, not measured per-SM utilization, which I did not profile.</p>
+<p>Each of the eight CTAs handled one query head and scanned the entire KV prefix by itself, one block of keys after another. Longer context meant a longer serial scan on the same eight SMs. That explained why the time grew with context without the kernel ever being bandwidth-limited.</p>
+<p>My first thought was to tune the kernel's launch parameters. But a different block size or warp count would not create more independent work. Each CTA would still own one complete scan. The real problem was the number of independent tasks, not the size of each one.</p>
+<p>So I looked for an implementation that splits a long prefix safely. SGLang already contained one: a split-KV verify kernel in <code>verify_splitkv.py</code>. In version 0.5.21 it was enabled only on AMD's gfx95 GPUs. An open pull request, <a href="https://github.com/sgl-project/sglang/pull/39316" target="_blank" rel="noopener noreferrer">sgl-project/sglang#39316</a> by rluisr, proposes enabling the same path on CUDA for the Triton backend.</p>
+<h3 id="how-split-kv-works">How split-KV works</h3>
+<p>The idea is the one behind <a href="https://pytorch.org/blog/flash-decoding/" target="_blank" rel="noopener noreferrer">Flash-Decoding</a>. Instead of letting one CTA scan the whole prefix, divide the prefix into chunks and give each chunk its own CTA. The chunks are processed at the same time.</p>
+<p>Each chunk computes a partial attention result over its own keys. A partial result cannot just be added to the others, because softmax normalizes across all keys at once. So each chunk also keeps the maximum score it saw and the sum of its exponentials. A second, small kernel merges the chunks: it rescales each partial output by how its local maximum compares with the global one, then normalizes by the combined sum. This &quot;log-sum-exp&quot; merge gives exactly the same result as a single pass over all keys. The merge kernel also adds the small causal block where the draft tokens attend to each other.</p>
+<h3 id="enabling-it-on-cuda">Enabling it on CUDA</h3>
+<p>The change I needed was a gate, not a kernel. I ported the CUDA enablement from the pull request behind an environment variable, so stock and split-KV runs stayed separable in A/B tests:</p>
+<pre class="code"><code class="language-diff"><span class="w"> </span>        self.use_verify_splitkv = (
+<span class="gd">-            is_gfx95_supported()</span>
+<span class="gi">+            # Port of sgl-project/sglang#39316 (open): the split-KV verify kernel is NV-safe;</span>
+<span class="gi">+            # opt-in on CUDA here (SGLANG_SPLITKV_VERIFY_ON_CUDA=1) so A/B runs stay separable.</span>
+<span class="gi">+            (is_gfx95_supported() or __import__(&quot;os&quot;).environ.get(&quot;SGLANG_SPLITKV_VERIFY_ON_CUDA&quot;) == &quot;1&quot;)</span>
+<span class="w"> </span>            and envs.SGLANG_ENABLE_SPLITKV_VERIFY.get()
+<span class="w"> </span>            and self.topk == 1
+<span class="w"> </span>        )
+</code></pre>
+<p class="src">From <a href="code/patches/splitkv_verify_cuda_pr39316.diff">splitkv_verify_cuda_pr39316.diff</a>, file <code>srt/layers/attention/triton_backend.py</code></p>
+<p>The kernel itself is SGLang's. It handles only the cases it can serve exactly, such as a causal chain of draft tokens, and falls back to the original path otherwise. It also picks its split count from static tensor shapes, which keeps it safe inside CUDA graph capture. In my traces it launched a grid of (1, 8, 16): 128 CTAs of 128 threads.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Verification attention at 4K</th>
+<th>Grid</th>
+<th>CTAs</th>
+<th>Time per call</th>
+<th>Per round, 6 layers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Triton <code>_fwd_kernel</code></td>
+<td>(1, 8, 1)</td>
+<td>8</td>
+<td>740.2 µs</td>
+<td>4.44 ms</td>
+</tr>
+<tr>
+<td>Split-KV, chunk kernel and merge</td>
+<td>(1, 8, 16) and (1, 8)</td>
+<td>128 and 8</td>
+<td>46.4 and 12.5 µs</td>
+<td>0.35 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-attn"><span class="cap-num">Table 7.</span> Attention launch configurations and kernel times from CUPTI traces before and after enabling split-KV <a class="cite" href="data/ledger.html#L19" title="Ledger entry 19: Triton verify attention vs context length (4K, fits S2 KV pool 5764)">L19</a> <a class="cite" href="data/ledger.html#L20" title="Ledger entry 20: Stage2 functional: split-KV verify (port #39316) alone and with FP8 head; 1K+4K">L20</a></p>
+<p>The attention kernel became 12.6x faster per call <a class="cite" href="data/ledger.html#L20" title="Ledger entry 20: Stage2 functional: split-KV verify (port #39316) alone and with FP8 head; 1K+4K">L20</a>. End to end, split-KV alone improved code 1K by only 2.9%, but code 4K by 20.8% <a class="cite" href="data/ledger.html#L22" title="Ledger entry 22: Stage2 A/B: split-KV verify (#39316 port) x FP8 draft head, 2-step, pass 2">L22</a>. Combined with the FP8 head, the gains over stock were +23.0% on code 1K, +40.8% on code 4K and +19.3% on MT-Bench.</p>
+<p>The difference between 1K and 4K follows from how much of the round attention occupied. At 1K it was about 1.4 ms of a 20.4 ms round, so even removing it entirely could not do much. At 4K it was 4.44 ms of a 24.14 ms round. <span class="tag est">Estimate</span> Saving 4.09 ms predicts a round 17% shorter. The measured TPOT ratio was 0.828, a 17.2% reduction. The prediction and the measurement agreed, which told me the trace's accounting was trustworthy.</p>
+<h2 id="int4-in-the-server-and-the-limit-it-ran-into">INT4 in the server, and the limit it ran into</h2>
+<p>With attention fixed, I returned to the INT4 head. In isolation it was nearly twice as fast as FP8 (<a href="#table-heads">Table 5</a>), so I expected a clear gain.</p>
+<p>The gain was small and partly not significant: 0.957x TPOT on code at two draft steps and 0.888x at three <a class="cite" href="data/ledger.html#L26" title="Ledger entry 26: Stage3 A/B: INT4 g32 draft head vs FP8 (both + split-KV), 2 and 3 steps, pass 2">L26</a>. Two things limited it. The lower top-1 agreement cost 0.6 to 4% of accepted tokens per round. And at two draft steps the head ran only twice per round, so after FP8 it was no longer the dominant cost.</p>
+<p>The same session showed something more interesting. Three draft steps beat two on code, 6.31 against 6.69 ms per token, because acceptance rose from 2.44 to 2.82 tokens per round <a class="cite" href="data/ledger.html#L24" title="Ledger entry 24: depth retune after FP8 head + split-KV verify, pass 2">L24</a>. Deeper drafting was helping. But at three steps the KV pool held only 2,584 tokens, too few for a 4K prompt, and four steps would not start at all. To go deeper I first had to find memory.</p>
+<h2 id="replayssm-memory-for-deeper-drafts">ReplaySSM: memory for deeper drafts</h2>
+<p>This is <a href="#finding-3">finding 3</a> from the first trace, now blocking real progress. The memory problem came from the model's architecture. Eighteen of its 24 layers are Gated DeltaNet layers, a form of linear attention. Instead of a KV cache that grows with every token, each of these layers keeps a fixed-size recurrent state per sequence.</p>
+<p>That state complicates speculation. Verifying several draft tokens advances the state several times. If the target rejects some of them, the state must roll back to the last accepted token. By default SGLang keeps a full copy of every layer's recurrent state for every draft position, in a buffer called <code>intermediate_ssm_state_cache</code>. At two draft steps that buffer took 0.11 GB, and it grows with depth.</p>
+<p>On an 8 GB GPU that buffer decided what fit:</p>
+<ul>
+<li>With three draft steps, the KV pool shrank to 2,584 tokens <a class="cite" href="data/ledger.html#L3" title="Ledger entry 3: strongest stock NEXTN steps (1-5), topk 1, draft tokens = steps+1 (order fwd, profiled)">L3</a></li>
+<li>Four and five steps failed at startup with &quot;Loaded weights leave no GPU memory for the KV cache&quot; <a class="cite" href="data/ledger.html#L5" title="Ledger entry 5: S5 fit probe on 8 GB">L5</a></li>
+</ul>
+<p>SGLang has a stock alternative, enabled with <code>--enable-linear-replayssm-spec</code>. ReplaySSM stores the raw per-draft inputs, which are much smaller than full state copies. When the target decides how many tokens to accept, it replays only those inputs onto the committed state.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Before</th>
+<th>With ReplaySSM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Per-draft recurrent-state snapshots</td>
+<td>0.11 GB</td>
+<td>0</td>
+</tr>
+<tr>
+<td>KV pool, 2 draft steps</td>
+<td>5,764 tokens</td>
+<td>14,148 tokens</td>
+</tr>
+<tr>
+<td>KV pool, 3 draft steps</td>
+<td>2,584 tokens</td>
+<td>14,148 tokens</td>
+</tr>
+<tr>
+<td>Recurrent-state verify kernel</td>
+<td>0.25 ms per round</td>
+<td>0.18 ms per round</td>
+</tr>
+<tr>
+<td>Round time, 2 steps, code 1K</td>
+<td>14.66 ms</td>
+<td>14.62 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-replayssm"><span class="cap-num">Table 8.</span> Effect of ReplaySSM on memory and round time <a class="cite" href="data/ledger.html#L32" title="Ledger entry 32: Phase1: ReplaySSM spec-verify on best stack (memory + GDN verify traffic)">L32</a></p>
+<p>SGLang sizes the KV pool from whatever memory remains inside its static budget (85% of the GPU here) after weights, CUDA graphs and the recurrent-state pools. Memory freed from the snapshots goes straight into the KV pool.</p>
+<p><span class="tag est">Estimate</span> On this model a KV token is cheap, because only the 6 full-attention layers store keys and values, each with 2 KV heads of dimension 256:</p>
+<div class="eq"><math display="block"><mrow><mn>6</mn><mo>×</mo><mn>2</mn><mo>×</mo><mn>2</mn><mo>×</mo><mn>256</mn><mo>×</mo><mtext>2 B</mtext><mo>+</mo><mtext>2,048 B</mtext><mo>=</mo><mtext>14,336 B per token</mtext></mrow></math><span class="eq-label">layers × (K,V) × KV heads × head dim × BF16, + draft layer</span></div>
+<p>At that size the 0.11 GB freed is worth roughly 8,000 tokens, consistent with the measured increase of 8,384 tokens.</p>
+<p>ReplaySSM did not make anything faster; the round time stayed within noise. Its value was the memory, and with it four and five draft steps finally fit.</p>
+<h2 id="choosing-the-speculative-depth">Choosing the speculative depth</h2>
+<p>With memory available, the question became how deep to draft. More steps propose more tokens, but they are not free. Each step costs a draft pass, and each extra token makes verification slightly more expensive. Throughput depends on both:</p>
+<div class="eq"><math display="block"><mrow><mi>R</mi><mspace width="0.25em"/><mtext>[tokens/s]</mtext><mo>=</mo><mfrac><mrow><mn>1000</mn><mo>×</mo><mi>A</mi></mrow><mrow><msub><mi>T</mi><mtext>round</mtext></msub><mspace width="0.25em"/><mtext>[ms]</mtext></mrow></mfrac></mrow></math><span class="eq-label">A = committed tokens per round</span></div>
+<p>An extra step pays off only if it raises the committed tokens per round by a larger fraction than it raises the round time:</p>
+<div class="eq"><math display="block"><mrow><mtext>add a step only if</mtext><mspace width="1.2em"/><mfrac><mrow><mi>Δ</mi><mi>A</mi></mrow><mi>A</mi></mfrac><mo>&gt;</mo><mfrac><mrow><mi>Δ</mi><msub><mi>T</mi><mtext>round</mtext></msub></mrow><msub><mi>T</mi><mtext>round</mtext></msub></mfrac></mrow></math></div>
+<p>I swept two to five steps in one paired session <a class="cite" href="data/ledger.html#L35" title="Ledger entry 35: Phase1 A/B: ReplaySSM + depth 3/4/5 (INT4 head, split-KV) vs stock and prior best, pass 1">L35</a> <a class="cite" href="data/ledger.html#L36" title="Ledger entry 36: Phase1 A/B: ReplaySSM + depth 3/4/5 (INT4 head, split-KV) vs stock and prior best, pass 2">L36</a>.</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-depth.svg" alt="Two line charts against draft steps 2 to 5. Left: accepted tokens per round rise steadily for code and MT-Bench. Right: throughput peaks at three steps for MT-Bench and stays flat from three to five steps for code."></div>
+<figcaption id="figure-depth"><span class="cap-num">Figure 4.</span> Accepted tokens per round and decode throughput against draft depth, from one paired session with the INT4 head, split-KV verification and ReplaySSM</figcaption>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Draft steps</th>
+<th>Code 1K tokens per round</th>
+<th>Code 1K tok/s</th>
+<th>MT-Bench tokens per round</th>
+<th>MT-Bench tok/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>2.41</td>
+<td>157.8</td>
+<td>2.05</td>
+<td>128.5</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2.79</td>
+<td>172.6</td>
+<td>2.36</td>
+<td>140.8</td>
+</tr>
+<tr>
+<td>4</td>
+<td>3.06</td>
+<td>170.7</td>
+<td>2.45</td>
+<td>132.6</td>
+</tr>
+<tr>
+<td>5</td>
+<td>3.29</td>
+<td>171.2</td>
+<td>2.54</td>
+<td>126.7</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-depthsweep"><span class="cap-num">Table 9.</span> Draft-depth sweep (<a href="data/runs/depth_sweep_L35_L36.txt">data</a>)</p>
+<p>Acceptance kept rising, but code throughput went flat after three steps and chat throughput fell. The rule above explains why. Profiling four and five steps on code gave rounds of 17.71 and 19.03 ms <a class="cite" href="data/ledger.html#L37" title="Ledger entry 37: per-depth round timing (profile only) 1K">L37</a>:</p>
+<div class="eq"><math display="block"><mrow><mfrac><mrow><mi>Δ</mi><mi>A</mi></mrow><mi>A</mi></mfrac><mo>=</mo><mfrac><mn>3.29</mn><mn>3.06</mn></mfrac><mo>−</mo><mn>1</mn><mo>=</mo><mtext>7.5%</mtext><mspace width="1.2em"/><mfrac><mrow><mi>Δ</mi><msub><mi>T</mi><mtext>round</mtext></msub></mrow><msub><mi>T</mi><mtext>round</mtext></msub></mfrac><mo>=</mo><mfrac><mn>19.03</mn><mn>17.71</mn></mfrac><mo>−</mo><mn>1</mn><mo>=</mo><mtext>7.5%</mtext></mrow></math><span class="eq-label">from four to five draft steps</span></div>
+<p>The fifth step bought exactly as much acceptance as it cost in time. Each draft step still cost about 1.2 ms, most of it the draft's output head and its single transformer layer. Deeper drafting would only pay if each step got much cheaper.</p>
+<h2 id="shrinking-the-draft-vocabulary">Shrinking the draft vocabulary</h2>
+<p>Quantization had cut the draft head's bytes per row (<a href="#finding-1">finding 1</a>); the next step was to read fewer rows. The cheapest bytes are the ones never read. Most of the 248,320 vocabulary rows are rarely the next token. The idea published as <a href="https://arxiv.org/abs/2502.14856" target="_blank" rel="noopener noreferrer">FR-Spec</a> restricts the draft's output head to the most frequent tokens, and SGLang exposes it as <code>--speculative-token-map</code>.</p>
+<p>I built 32K and 64K maps from text that does not overlap my prompts: CPython standard-library sources and Python package metadata, 721 files and 3.4M tokens (<a href="code/data/build_token_map.py">build_token_map.py</a>). Special tokens are always kept.</p>
+<p>The stock token map crashed on this model with a device-side &quot;index out of bounds&quot; assertion <a class="cite" href="data/ledger.html#L2" title="Ledger entry 2: token map functional probe (tied embeddings)">L2</a>. Qwen3.5's draft ties its head to the embedding, and the model's <code>set_embed_and_head</code> ignores the reduced head when embeddings are tied. The draft kept producing indices over the full vocabulary, which the map then indexed out of range. An upstream fix is open (<a href="https://github.com/sgl-project/sglang/pull/42094" target="_blank" rel="noopener noreferrer">sgl-project/sglang#42094</a>, by SamMausberg). My quantized-head module avoids the problem by selecting the hot rows itself:</p>
+<pre class="code"><code class="language-python">    <span class="k">if</span> <span class="n">hot_token_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">hot_token_id</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+        <span class="c1"># Tied Qwen3.5 MTP keeps the full embedding as its head: take the hot rows here so the</span>
+        <span class="c1"># draft&#39;s logits match hot_token_id (which maps draft top-k back to vocabulary ids).</span>
+        <span class="n">weight</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">hot_token_id</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+</code></pre>
+<p>The draft's argmax is then an index into the reduced vocabulary, and SGLang's draft loop maps it back to a real token ID:</p>
+<pre class="code"><code class="language-python">        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hot_token_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">topk_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hot_token_id</span><span class="p">[</span><span class="n">topk_index</span><span class="p">]</span>
+</code></pre>
+<p>Combining the reduced vocabulary with INT4 shrank the head dramatically:</p>
+<div class="eq"><math display="block"><mrow><mn>32,768</mn><mo>×</mo><mn>2,048</mn><mo>×</mo><mtext>0.5 B</mtext><mo>+</mo><mn>32,768</mn><mo>×</mo><mn>64</mn><mo>×</mo><mtext>2 B</mtext><mo>=</mo><mtext>32 MiB</mtext><mo>+</mo><mtext>4 MiB</mtext><mo>=</mo><mtext>36 MiB</mtext></mrow></math><span class="eq-label">INT4 weights + group-32 scales</span></div>
+<figure>
+<div class="fig-body"><img src="assets/fig-draft-head.svg" alt="Horizontal bars of draft-head time per call: BF16 full vocabulary 2,939 microseconds, FP8 1,515, INT4 815, INT4 with 32K rows 113."></div>
+<figcaption id="figure-headtime"><span class="cap-num">Figure 5.</span> Draft output-head time per call across the project, from isolated benchmarks for the full-vocabulary heads and from the final CUPTI trace for the 32K-row head</figcaption>
+</figure>
+<p>The head went from 970 MiB to 36 MiB, 27x fewer bytes per draft step. In the final draft graph it takes 112.9 µs per call, against 2,786 µs for the full BF16 head in the stock trace. Over a five-step round the draft fell from 6.22 to 2.70 ms, and the round from 19.03 to 15.48 ms <a class="cite" href="data/ledger.html#L41" title="Ledger entry 41: Phase3b functional: hot-vocab (64K/32K) INT4 draft head on 5-step stack">L41</a>.</p>
+<p>The price is coverage. The draft can never propose a token outside the map, so when the target wants one, the round stops at that position. Code fell from 3.29 to 3.16 tokens per round with 64K rows, and to 3.10 with 32K <a class="cite" href="data/ledger.html#L41" title="Ledger entry 41: Phase3b functional: hot-vocab (64K/32K) INT4 draft head on 5-step stack">L41</a>. Correctness is not at stake, because the target still verifies with its full BF16 head. A missing token only shortens a round.</p>
+<p>The trade was clearly worth it. Paired against stock, code 1K went from +44.3% to <strong>+64.3%</strong>, code 4K from +70.6% to <strong>+92.5%</strong>, and MT-Bench from +37.4% to <strong>+57.4%</strong> <a class="cite" href="data/ledger.html#L36" title="Ledger entry 36: Phase1 A/B: ReplaySSM + depth 3/4/5 (INT4 head, split-KV) vs stock and prior best, pass 2">L36</a> <a class="cite" href="data/ledger.html#L43" title="Ledger entry 43: Phase3b A/B: hot-vocab INT4 draft head (64K/32K) vs stock and current bests, pass 2">L43</a>. With cheap draft steps, five steps now beat three on code.</p>
+<h2 id="two-smaller-changes-on-the-draft-side">Two smaller changes on the draft side</h2>
+<p>The head was now small, so the rest of the draft step became the next target.</p>
+<p><strong>An FP8 draft layer.</strong> SGLang can quantize the draft model's transformer layer with <code>--speculative-draft-model-quantization fp8</code>. The stock path chose the CUTLASS W8A8 GEMM, which barely helped at batch 1: 1,369 against 1,444 µs per round for the BF16 kernels it replaced <a class="cite" href="data/ledger.html#L46" title="Ledger entry 46: Phase3c A/B: FP8 draft MTP layer + 6-step vs stock and current bests, pass 2">L46</a>. That was the small-M tiling problem from the Nsight Compute profile, now inside the draft layer. Routing the FP8 layer to Marlin's weight-only kernel with <code>SGLANG_FORCE_FP8_MARLIN=1</code> cut the draft from 2.55 to 2.03 ms per round <a class="cite" href="data/ledger.html#L47" title="Ledger entry 47: Phase3d functional: FP8 draft layer on Marlin W8A16 (+6/7 steps)">L47</a>. Code 1K reached +74.8% over stock <a class="cite" href="data/ledger.html#L49" title="Ledger entry 49: Phase3d A/B: Marlin-FP8 draft layer vs CUTLASS-FP8 and stock, pass 2">L49</a>.</p>
+<p><strong>Split-KV for the draft-extend pass.</strong> After each verification, the draft runs an &quot;extend&quot; pass over the newly accepted tokens to refresh its own KV cache. In a 4K trace that pass still used the serial <code>_fwd_kernel</code>, 494 µs per round. It is the same causal prefix-plus-chunk problem as verification, so I let the split-KV path serve it too:</p>
+<pre class="code"><code class="language-diff"><span class="gd">-            and forward_batch.forward_mode.is_target_verify()</span>
+<span class="gi">+            and (</span>
+<span class="gi">+                forward_batch.forward_mode.is_target_verify()</span>
+<span class="gi">+                # Draft extend (spec v2) is the same causal prefix+chunk problem; opt-in so A/B</span>
+<span class="gi">+                # stays separable. can_handle() still rejects anything non-causal/ragged.</span>
+<span class="gi">+                or (</span>
+<span class="gi">+                    forward_batch.forward_mode.is_draft_extend_v2()</span>
+<span class="gi">+                    and __import__(&quot;os&quot;).environ.get(&quot;SGLANG_SPLITKV_DRAFT_EXTEND&quot;) == &quot;1&quot;</span>
+<span class="gi">+                )</span>
+<span class="gi">+            )</span>
+</code></pre>
+<p class="src">My extension, in the same patch; the kernel is SGLang's</p>
+<p>At 4K the draft fell from 3.11 to 2.53 ms per round <a class="cite" href="data/ledger.html#L51" title="Ledger entry 51: Phase3e functional: split-KV for draft extend (4K profile)">L51</a>. Paired in the same session, code 4K went from +95.0% to +105.3% over stock, and code 1K from +71.8% to +75.3% <a class="cite" href="data/ledger.html#L53" title="Ledger entry 53: Phase3e A/B: split-KV for draft extend on the three best configs, pass 2">L53</a>.</p>
+<p>At this point a five-step round on code 1K took 14.98 ms: 12.07 ms of verification, 1.97 ms of drafting, 0.18 ms of eager bookkeeping and 0.71 ms of idle <a class="cite" href="data/ledger.html#L55" title="Ledger entry 55: final: round timing of verified top config (profile only)">L55</a>. A draft step cost about 0.39 ms, a third of what it had cost before the vocabulary change.</p>
+<h2 id="context-augmented-draft-vocabulary">Context-augmented draft vocabulary</h2>
+<p>The next clue came from a side result. While testing adaptive depth (described among the experiments I did not keep), I also ran the 64K map at five steps. MT-Bench acceptance jumped from 2.32 to 2.62 tokens per round, against the 32K map <a class="cite" href="data/ledger.html#L65" title="Ledger entry 65: A/B adaptive depth 3&lt;-&gt;5 (S5A35) and 64K map at 5 steps vs bests, pass 2">L65</a>. The vocabulary was costing more acceptance than I had assumed.</p>
+<p>So I measured how often the target emits a token the draft cannot propose. This is an offline count over the stock outputs (<a href="tools/vocab_coverage.py">vocab_coverage.py</a>, <a href="data/runs/vocab_coverage.txt">output</a>):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Target tokens outside the draft vocabulary</th>
+<th>Code 1K</th>
+<th>Code 4K</th>
+<th>MT-Bench</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32K corpus map</td>
+<td>3.71%</td>
+<td>2.34%</td>
+<td>12.81%</td>
+</tr>
+<tr>
+<td>48K map, half corpus and half tokenizer rank</td>
+<td>2.99%</td>
+<td>1.95%</td>
+<td>4.06%</td>
+</tr>
+<tr>
+<td>64K corpus map</td>
+<td>1.24%</td>
+<td>0.59%</td>
+<td>2.71%</td>
+</tr>
+<tr>
+<td>32K map plus the request's own prompt tokens</td>
+<td><strong>0.91%</strong></td>
+<td><strong>1.27%</strong></td>
+<td>11.82%</td>
+</tr>
+<tr>
+<td>Share of 32K misses that appear in the prompt</td>
+<td>75%</td>
+<td>46%</td>
+<td>8%</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-coverage"><span class="cap-num">Table 10.</span> How often the target's next token is missing from the draft vocabulary, measured on recorded stock outputs</p>
+<p>Three quarters of the code misses were tokens from the prompt itself: identifiers, file names and unusual words the response copies from the files it read. A frequency map built in advance cannot know them, but the prompt contains them.</p>
+<p>That suggested a draft head with two parts:</p>
+<ul>
+<li>The static INT4 head over the 32K map</li>
+<li>A small BF16 block of up to 256 extra rows, filled with the prompt's tokens that the map lacks</li>
+</ul>
+<p>Each request's prefill fills the extra rows, outside any CUDA graph:</p>
+<pre class="code"><code class="language-python">    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">input_ids</span><span class="p">[(</span><span class="n">input_ids</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">input_ids</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_map</span><span class="o">.</span><span class="n">numel</span><span class="p">())]</span>
+        <span class="n">new</span><span class="p">,</span> <span class="n">cnt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">in_map</span><span class="p">[</span><span class="n">ids</span><span class="p">]],</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># host sync: prefill only</span>
+        <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">slots</span><span class="p">:</span>
+            <span class="n">new</span> <span class="o">=</span> <span class="n">new</span><span class="p">[</span><span class="n">cnt</span><span class="o">.</span><span class="n">topk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slots</span><span class="p">)</span><span class="o">.</span><span class="n">indices</span><span class="p">]</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hot_ext</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">+</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">new</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dyn_w</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_weight</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">new</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dyn_mask</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dyn_mask</span><span class="p">[</span><span class="n">n</span><span class="p">:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg</span>
+</code></pre>
+<p class="src">From <a href="code/patches/fp8_draft_head.diff">fp8_draft_head.diff</a>, class <code>ContextVocabHead</code> in <code>srt/speculative/draft_lm_head_quant.py</code></p>
+<p>The details that make it work:</p>
+<ul>
+<li><strong>Deduplication:</strong> <code>torch.unique</code> keeps each missing token once, and if more than 256 are missing the most frequent win. The largest prompt in my sets needed 67 rows</li>
+<li><strong>Remapping:</strong> the token-ID map is extended by 256 slots, so the same stock line that maps hot indices back to token IDs also covers the dynamic rows</li>
+<li><strong>Logits:</strong> the head returns the static logits concatenated with <code>x @ dyn_w.T + dyn_mask</code>. Unused slots carry the most negative value, so they can never win the argmax</li>
+<li><strong>CUDA graphs:</strong> the buffers are allocated once and updated in place, so the captured draft graphs see each new prompt's rows without being captured again. The only host synchronization is one <code>torch.unique</code> per request, at prefill</li>
+<li><strong>Cost:</strong> 256 rows of 2,048 BF16 values add 1 MiB of reads per draft step, next to 36 MiB for the static head</li>
+</ul>
+<p>The context-conditioned head currently targets single-request inference. Its dynamic rows are stored in shared buffers. Supporting concurrent requests will require request-specific state management and additional correctness testing.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Configuration, paired against the 32K map</th>
+<th>Code 1K</th>
+<th>Code 4K</th>
+<th>MT-Bench</th>
+<th>Tokens per round, code 1K and MT-Bench</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32K map, reference</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>3.16 and 2.32</td>
+</tr>
+<tr>
+<td>32K map and context rows</td>
+<td><strong>+4.1%</strong> (0.8 to 6.1)</td>
+<td>+1.0% (−0.8 to 8.1)</td>
+<td>+1.7% (−0.2 to 4.5)</td>
+<td>3.24 and 2.36</td>
+</tr>
+<tr>
+<td>48K blended map and context rows</td>
+<td>+1.2%</td>
+<td>+3.6%</td>
+<td>+5.3% (2.5 to 10.4)</td>
+<td>3.25 and 2.49</td>
+</tr>
+<tr>
+<td>64K map</td>
+<td>+0.9%</td>
+<td>−2.1%</td>
+<td><strong>+10.5%</strong> (7.0 to 13.6)</td>
+<td>3.27 and 2.62</td>
+</tr>
+<tr>
+<td>64K map and context rows</td>
+<td>+1.6%</td>
+<td>−0.7%</td>
+<td>+6.8% (3.0 to 14.9)</td>
+<td>3.27 and 2.57</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-vocab"><span class="cap-num">Table 11.</span> Draft-vocabulary variants pooled over four paired passes, or two for the 48K and 64K-with-context rows, with 95% intervals in parentheses where significant <a class="cite" href="data/ledger.html#L68" title="Ledger entry 68: A/B context-augmented draft vocabulary (256 prompt rows) on 32K and 64K maps, pass 2">L68</a> <a class="cite" href="data/ledger.html#L69" title="Ledger entry 69: A/B context-augmented draft vocabulary (256 prompt rows) on 32K and 64K maps, pass 1 re-run (first pass memclk-throttled)">L69</a> <a class="cite" href="data/ledger.html#L70" title="Ledger entry 70: A/B one map for all workloads: 48K corpus/BPE-rank blend + context rows vs 32K, 32K+context, 64K, pass 1">L70</a> <a class="cite" href="data/ledger.html#L71" title="Ledger entry 71: A/B one map for all workloads: 48K corpus/BPE-rank blend + context rows vs 32K, 32K+context, 64K, pass 2">L71</a> (<a href="data/runs/vocab_pooled_L68-L71.txt">data</a>)</p>
+<p>Context rows raised acceptance on every workload, and the gain was significant on code 1K, the workload they were designed for. Chat behaved differently: only 8% of its misses came from the prompt. The writing prompts simply use a broader vocabulary, which the 64K map covers better than any prompt-based addition. So the two workloads ended up with different draft vocabularies.</p>
+<p>One last draft-side detail paid off for code. The draft layer's input projection, a 4096-to-2048 <code>nn.Linear</code> called <code>fc</code>, is a plain PyTorch module that SGLang's FP8 draft quantization skips. The final trace still shows a 512-CTA BF16 GEMV of 49.6 µs, four times per round; its shape matches this projection. An FP8 Marlin copy raised code acceptance from 3.24 to 3.32 tokens per round, and the final code configuration measured <strong>+6.8%</strong> (3.7 to 9.3) over the previous best <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a>.</p>
+<p>The same projection behaved differently on chat. An INT4 copy dropped MT-Bench acceptance to 2.39 <a class="cite" href="data/ledger.html#L72" title="Ledger entry 72: functional: INT4 Marlin copy of the MTP fc projection on both new bests">L72</a>, and even FP8 lowered it with the 64K map, from 2.62 to 2.52, in two separate runs <a class="cite" href="data/ledger.html#L73" title="Ledger entry 73: functional: FP8 Marlin copy of the MTP fc projection (INT4 lost acceptance)">L73</a> <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a>. The chat configuration therefore keeps this projection in BF16.</p>
+<h2 id="approaching-the-memory-bandwidth-limit">Approaching the memory-bandwidth limit</h2>
+<p>After these changes the draft is small, and the profile looks very different from where I started. Verification took 12.07 of the 14.98 ms round <a class="cite" href="data/ledger.html#L55" title="Ledger entry 55: final: round timing of verified top config (profile only)">L55</a>. Inside verification, the target's BF16 GEMMs took about 11 ms. Was there much left to gain?</p>
+<p>The target's linear layers hold 3.763 GB of BF16 weights: the output head plus every projection in all 24 layers (<a href="code/profiling/gemm_bench.py">gemm_bench.py</a>, <a class="cite" href="data/ledger.html#L38" title="Ledger entry 38: per-depth round timing (profile only) 4K, 5-step">L38</a>). That is hundreds of times larger than the GPU's on-chip L2 cache, so each verification pass has to stream the weights from DRAM again. The best BF16 streaming rate I measured on this GPU was about 368 GB/s.</p>
+<p><span class="tag theo">Theoretical</span> Under three assumptions, a lower bound on the time of one verification pass follows: every weight byte is read from DRAM exactly once per pass, nothing is reused from cache between passes, and 368 GB/s is the sustainable rate.</p>
+<div class="eq"><math display="block"><mrow><msub><mi>T</mi><mtext>min</mtext></msub><mo>≈</mo><mfrac><mtext>bytes per verify</mtext><mtext>bandwidth</mtext></mfrac><mo>=</mo><mfrac><mtext>3.763 GB</mtext><mtext>368 GB/s</mtext></mfrac><mo>≈</mo><mtext>10.2 ms</mtext></mrow></math></div>
+<p>The byte count is an estimate from the weight shapes; I could not read a DRAM-bytes counter for these kernels. Against that estimate, the measured verification GEMMs took 10.73 ms at six tokens per pass, about 95% of the floor <a class="cite" href="data/ledger.html#L38" title="Ledger entry 38: per-depth round timing (profile only) 4K, 5-step">L38</a>. The rest of verification, attention, recurrent-state updates and normalization, added about 1.1 ms. So verification is running close to what streaming the weights alone would require.</p>
+<p>Throughput per round combines that time with the committed tokens:</p>
+<div class="eq"><math display="block"><mrow><mi>R</mi><mo>=</mo><mfrac><mrow><mn>1000</mn><mo>×</mo><mn>3.16</mn></mrow><mtext>14.98 ms</mtext></mfrac><mo>≈</mo><mtext>211 tokens/s</mtext></mrow></math><span class="eq-label">profiled round <a class="cite" href="data/ledger.html#L55" title="Ledger entry 55: final: round timing of verified top config (profile only)">L55</a></span></div>
+<p>The paired benchmark measured 213.8 tok/s for the same configuration in the same session <a class="cite" href="data/ledger.html#L53" title="Ledger entry 53: Phase3e A/B: split-KV for draft extend on the three best configs, pass 2">L53</a>. The difference comes from aggregation. The profiler number combines the median round of one profiled request with the benchmark's mean acceptance, while the benchmark takes the median TPOT over twelve requests.</p>
+<p>The same equation shows why acceptance remains the strongest lever. Verification costs nearly the same whether it checks four tokens or six, because the weights are read once per pass either way. Every additional accepted token is close to free throughput, as long as producing it does not add much draft time. That is why deeper drafting paid off only after each draft step became cheap.</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-ceiling.svg" alt="Horizontal bars of throughput: measured 211 tokens per second; without idle and eager time 224; verify only 261; verification at the bandwidth floor 309; the floor with 4 tokens per round 391. All but the first are hatched as theoretical."></div>
+<figcaption id="figure-ceiling"><span class="cap-num">Figure 6.</span> Measured throughput of the code 1K configuration next to theoretical scenarios that remove parts of the round or raise acceptance</figcaption>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Round time</th>
+<th>Tokens per round</th>
+<th>tok/s</th>
+<th>Kind</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Measured round</td>
+<td>14.98 ms</td>
+<td>3.16</td>
+<td>211</td>
+<td><span class="tag meas">Measured</span></td>
+</tr>
+<tr>
+<td>Remove the 0.71 ms scheduler idle</td>
+<td>14.27 ms</td>
+<td>3.16</td>
+<td>221, +5.0%</td>
+<td><span class="tag theo">Theoretical</span></td>
+</tr>
+<tr>
+<td>Remove idle and eager bookkeeping</td>
+<td>14.08 ms</td>
+<td>3.16</td>
+<td>224, +6.3%</td>
+<td><span class="tag theo">Theoretical</span></td>
+</tr>
+<tr>
+<td>Verification only, draft free</td>
+<td>12.07 ms</td>
+<td>3.16</td>
+<td>261, +24%</td>
+<td><span class="tag theo">Theoretical</span></td>
+</tr>
+<tr>
+<td>Verification at the bandwidth floor, nothing else</td>
+<td>10.22 ms</td>
+<td>3.16</td>
+<td>309</td>
+<td><span class="tag theo">Theoretical</span></td>
+</tr>
+<tr>
+<td>Bandwidth floor with 4.0 tokens per round</td>
+<td>10.22 ms</td>
+<td>4.0</td>
+<td>391</td>
+<td><span class="tag theo">Theoretical</span></td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-scenarios"><span class="cap-num">Table 12.</span> Throughput scenarios built from the measured round <a class="cite" href="data/ledger.html#L55" title="Ledger entry 55: final: round timing of verified top config (profile only)">L55</a> and the bandwidth floor <a class="cite" href="data/ledger.html#L38" title="Ledger entry 38: per-depth round timing (profile only) 4K, 5-step">L38</a></p>
+<p>The scheduler idle, <a href="#finding-4">finding 4</a> from the first trace, is a useful example of a modest ceiling. It is real time, but removing all of it would add only 5%, and getting there means moving SGLang's speculative bookkeeping onto the GPU.</p>
+<p>Depth has its own limit. Five draft steps give a six-token linear chain, at most six committed tokens per round, and the profiled code configuration averaged 3.16. A sixth step raised acceptance by only 0.5% in a paired test, far less than it added to the round. Adding steps to a single chain has reached the point of diminishing returns. Branching tree drafts could raise acceptance further, but ReplaySSM, which made this depth fit in memory, supports only linear chains.</p>
+<p>My implementation appears close to a bandwidth-limited operating point for this workload, model, GPU and target precision. That does not establish the maximum throughput this GPU can deliver. A figure around 250 to 260 tok/s is roughly what this configuration would reach if everything except verification disappeared at today's acceptance. Going well beyond that needs more accepted tokens per verification, fewer target weight bytes, or an execution design that changes the balance between drafting and verification. 1,000 tok/s, for instance, would need about 10 committed tokens per round even at the bandwidth floor.</p>
+<h2 id="experiments-i-did-not-keep">Experiments I did not keep</h2>
+<p>The complete record is the <a href="data/ledger.html">experiment ledger</a>: 75 entries, including every failure. These were the most instructive.</p>
+<h3 id="a-merge-kernel-that-was-20-faster-and-did-not-matter">A merge kernel that was 20% faster and did not matter</h3>
+<p>The split-KV merge kernel launched one warp per program, a value tuned for AMD's 64-wide wavefronts. Since it now ran on NVIDIA's 32-wide warps, I suspected that setting was suboptimal. An isolated sweep with real shapes found four warps about 20% faster per call: 26 to 21 µs at 1K and 49.5 to 40.5 µs at 4K <a class="cite" href="data/ledger.html#L54" title="Ledger entry 54: SM120 launch config for split-KV verify kernels (combine kernel num_warps=1 tuned on AMD wave64; stage1 n_splits/BLOCK_N/warps)">L54</a> (<a href="code/profiling/splitkv_bench.py">splitkv_bench.py</a>).</p>
+<p>Before putting it into a paired run, I estimated what it could change. All split-KV attention together took about 0.5 ms per round at 4K, across seven calls. <span class="tag est">Estimate</span> A 20% faster merge would save about 0.1 ms per round, roughly 0.6% end to end. That is below what my paired runs can resolve on this laptop, about 3 to 5%. I reverted it. A faster kernel is only worth keeping if its share of the round is large enough to show.</p>
+<h3 id="flashinfer-faster-attention-slower-serving">FlashInfer: faster attention, slower serving</h3>
+<p>FlashInfer is SGLang's default attention backend on this GPU, so I measured it before choosing my baseline. Its verification attention took 101 µs per round against Triton's 1,463 µs in the same trace <a class="cite" href="data/ledger.html#L10" title="Ledger entry 10: FlashInfer attention backend for S2 (verify path portability)">L10</a>. Yet every FlashInfer configuration was 5 to 11% slower end to end <a class="cite" href="data/ledger.html#L12" title="Ledger entry 12: stock-default (FlashInfer) baseline re-establishment, pass 2">L12</a>.</p>
+<p>The time went to the CPU. FlashInfer's planning step needs the sequence lengths on the host, which forced a synchronization and several small copies every round. That stopped the scheduler from preparing the next round while the GPU was still busy, and GPU idle time grew to 3.2 ms per round. A hybrid with FlashInfer for verification and Triton for decoding still lost <a class="cite" href="data/ledger.html#L17" title="Ledger entry 17: Stage2 probe: hybrid attention (FlashInfer verify, Triton decode) stock and with FP8 head">L17</a>. The lesson was to account for host-side work before trusting a kernel benchmark.</p>
+<h3 id="six-draft-steps">Six draft steps</h3>
+<p>After the vocabulary change made draft steps cheap, I tried going deeper again. A single unpaired run put six steps at 4.40 ms per token, better than five <a class="cite" href="data/ledger.html#L51" title="Ledger entry 51: Phase3e functional: split-KV for draft extend (4K profile)">L51</a>. The paired test disagreed: −3.6% on code 1K (−6.4 to 0.4) and +1.2% on code 4K, both within noise <a class="cite" href="data/ledger.html#L53" title="Ledger entry 53: Phase3e A/B: split-KV for draft extend on the three best configs, pass 2">L53</a>.</p>
+<p>The depth rule explains why. Acceptance rose from 3.156 to 3.173 tokens per round, only 0.5%. One more draft step costs at least 0.39 ms of a 14.98 ms round, 2.6%, before any extra verification cost. Since then, unpaired numbers stay out of my tables.</p>
+<h3 id="adaptive-depth">Adaptive depth</h3>
+<p>Chat preferred fewer draft steps than code, so I tried SGLang's adaptive mode, which switches depth at runtime from a moving average of acceptance. I configured it to switch between three and five steps. With a narrow hysteresis band it flipped depth every four rounds. With a wider band it was stable, but the paired results were +0.9%, +3.4% and +1.1%, all with intervals that included zero <a class="cite" href="data/ledger.html#L59" title="Ledger entry 59: functional: adaptive depth 3&lt;-&gt;5 (stock --speculative-adaptive, tuned thresholds)">L59</a> <a class="cite" href="data/ledger.html#L64" title="Ledger entry 64: A/B adaptive depth 3&lt;-&gt;5 (S5A35) and 64K map at 5 steps vs bests, pass 1">L64</a> <a class="cite" href="data/ledger.html#L65" title="Ledger entry 65: A/B adaptive depth 3&lt;-&gt;5 (S5A35) and 64K map at 5 steps vs bests, pass 2">L65</a>. It did not justify its complexity.</p>
+<h3 id="an-int4-projection-that-changed-acceptance">An INT4 projection that changed acceptance</h3>
+<p>Quantizing the draft layer's input projection to INT4 looked like a free saving of about 0.2 ms per round. It cut MT-Bench acceptance from 2.62 to 2.39 tokens per round <a class="cite" href="data/ledger.html#L72" title="Ledger entry 72: functional: INT4 Marlin copy of the MTP fc projection on both new bests">L72</a>, which cost far more than the projection's time. In the draft, small numerical errors matter when they change which token gets proposed.</p>
+<h3 id="clock-throttling-and-measurement-quality">Clock throttling and measurement quality</h3>
+<p>One paired pass ran while the memory clock dropped from 12,001 to 9,001 MHz, and one configuration came out 2.2x slower <a class="cite" href="data/ledger.html#L67" title="Ledger entry 67: A/B context-augmented draft vocabulary (256 prompt rows) on 32K and 64K maps, pass 1">L67</a>. Memory bandwidth sets the speed of almost everything here, so a lower memory clock invalidates a comparison. I discarded the pass and re-ran it. The bench now logs clocks and power for every server.</p>
+<h3 id="smaller-dead-ends">Smaller dead ends</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Idea</th>
+<th>What happened</th>
+<th>What it taught me</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cuBLASLt chooses better kernels for skinny GEMMs</td>
+<td>96% of the bandwidth floor at every M, but at six tokens cuBLAS was already at 95% <a class="cite" href="data/ledger.html#L38" title="Ledger entry 38: per-depth round timing (profile only) 4K, 5-step">L38</a>; the paired pass was power-throttled <a class="cite" href="data/ledger.html#L39" title="Ledger entry 39: Phase3a cuBLASLt (TORCH_BLAS_PREFER_CUBLASLT=1) on winning configs, pass 1">L39</a> <a class="cite" href="data/ledger.html#L40" title="Ledger entry 40: Phase3a cuBLASLt (TORCH_BLAS_PREFER_CUBLASLT=1) on winning configs, pass 2">L40</a></td>
+<td>Check the operating point before tuning</td>
+</tr>
+<tr>
+<td>One 48K blended map can serve every workload</td>
+<td>+5.3% on MT-Bench but best on none <a class="cite" href="data/ledger.html#L71" title="Ledger entry 71: A/B one map for all workloads: 48K corpus/BPE-rank blend + context rows vs 32K, 32K+context, 64K, pass 2">L71</a></td>
+<td>Code and chat disagree, so two configurations beat one compromise</td>
+</tr>
+<tr>
+<td>A provably exact INT4 screen for the target's head</td>
+<td>Exact by construction, with 0 of 2,046 argmax mismatches, but the error bound was too loose and needed 420 MiB of VRAM <a class="cite" href="data/ledger.html#L58" title="Ledger entry 58: Certified-exact target LM head for greedy verify: INT4 g32 screen + per-row error bound + exact BF16 pass only over vocab blocks holding a p">L58</a></td>
+<td>Parked for a GPU with more memory</td>
+</tr>
+<tr>
+<td>Deep draft graphs are always smaller than the target graph</td>
+<td>My analyzer first labeled five-step draft graphs as target work <a class="cite" href="data/ledger.html#L44" title="Ledger entry 44: Phase3c functional: FP8 draft MTP layer (stock flag) + 6-step">L44</a></td>
+<td>Classify by the largest graph and sanity-check the totals</td>
+</tr>
+<tr>
+<td>WSL swapping causes rare slow runs</td>
+<td>Swap activity also occurred in normal runs <a class="cite" href="data/ledger.html#L34" title="Ledger entry 34: Anomaly repro: 3-step 4K slowdown; host RAM/swap sampled">L34</a></td>
+<td>Ruled out; two intermittent slowdowns remain unexplained</td>
+</tr>
+<tr>
+<td>Remove the scheduler's per-round host synchronization</td>
+<td>The idle comes from SGLang returning accept lengths to the CPU each round <a class="cite" href="data/ledger.html#L50" title="Ledger entry 50: Phase2 attribution only: CPU stacks of inter-graph idle on winning code config">L50</a></td>
+<td>Deferred: about 5% at best, with real memory-safety risk</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-deadends"><span class="cap-num">Table 13.</span> Smaller experiments and what each one showed</p>
+<h2 id="final-results">Final paired results</h2>
+<p>These are the final runs. Stock SGLang and my implementation ran in the same session, on the same prompts, alternating order across two passes <a class="cite" href="data/ledger.html#L74" title="Ledger entry 74: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 1">L74</a> <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Stock TPOT</th>
+<th>Stock tok/s</th>
+<th>My TPOT</th>
+<th>My tok/s</th>
+<th>Paired gain</th>
+<th>95% interval</th>
+<th>Tokens per round, stock and mine</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Code 1K</td>
+<td>8.838 ms</td>
+<td>113.2</td>
+<td><strong>4.504 ms</strong></td>
+<td><strong>222.0</strong></td>
+<td><strong>+93.3%</strong></td>
+<td>87.2 to 96.8</td>
+<td>2.48 and 3.32</td>
+</tr>
+<tr>
+<td>Code 4K</td>
+<td>10.671 ms</td>
+<td>93.7</td>
+<td><strong>5.091 ms</strong></td>
+<td><strong>196.4</strong></td>
+<td><strong>+109.0%</strong></td>
+<td>92.2 to 123.0</td>
+<td>2.42 and 3.11</td>
+</tr>
+<tr>
+<td>MT-Bench</td>
+<td>10.439 ms</td>
+<td>95.8</td>
+<td><strong>6.339 ms</strong></td>
+<td><strong>157.8</strong></td>
+<td><strong>+63.8%</strong></td>
+<td>45.3 to 80.1</td>
+<td>2.08 and 2.62</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-final"><span class="cap-num">Table 14.</span> Final paired benchmark: absolute throughput is 1000 divided by median TPOT, and the gain is the median of per-prompt paired ratios (<a href="data/runs/final_vs_stock_L74_L75.txt">data</a>)</p>
+<figure>
+<div class="fig-body"><img src="assets/fig-results.svg" alt="Bar chart of output tokens per second. Stock SGLang against my implementation: code 1K 113 and 222, code 4K 94 and 196, MT-Bench 96 and 158."></div>
+<figcaption id="figure-results"><span class="cap-num">Figure 7.</span> Decode throughput of stock SGLang and my implementation in the final paired session</figcaption>
+</figure>
+<p>The absolute throughput and the paired gain measure slightly different things. The absolute numbers divide 1000 by each configuration's median TPOT. The paired gain is the median of per-prompt ratios, which cancels prompt-to-prompt differences. For code 1K, the ratio of medians is 222.0 / 113.2 = 1.96x, while the paired median is 1.93x.</p>
+<p>Code and chat use different configurations. Neither one is best on all three workloads.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Code configuration</th>
+<th>Chat configuration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Draft steps per round</td>
+<td>5</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Draft output head</td>
+<td>INT4, 32K static rows and up to 256 prompt rows</td>
+<td>INT4, 64K static rows</td>
+</tr>
+<tr>
+<td>Draft transformer layer</td>
+<td>FP8 on Marlin, including its input projection</td>
+<td>FP8 on Marlin, input projection in BF16</td>
+</tr>
+<tr>
+<td>Verification attention</td>
+<td>Split-KV, CUDA gate ported from PR 39316</td>
+<td>Split-KV</td>
+</tr>
+<tr>
+<td>Draft-extend attention</td>
+<td>Split-KV, my extension</td>
+<td>Split-KV</td>
+</tr>
+<tr>
+<td>Recurrent-state rollback</td>
+<td>ReplaySSM, stock SGLang flag</td>
+<td>ReplaySSM</td>
+</tr>
+<tr>
+<td>Target model</td>
+<td>BF16, unchanged</td>
+<td>BF16, unchanged</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-configs"><span class="cap-num">Table 15.</span> The two final configurations</p>
+<p>At 4K the chat configuration measured 196.6 tok/s (+111.6%). That is a statistical tie with the code configuration, not a separate win.</p>
+<p>The final session ran with the laptop at its power limit. The enforced limit moved between 70 and 79 W, and the software power cap was active in 71 to 100% of samples (<a href="data/runs/telemetry_L74_L75.txt">telemetry</a>). An earlier session, in which stock itself ran about 4% faster, measured 213.8 tok/s for code 1K and 204.3 tok/s for code 4K with the previous code configuration <a class="cite" href="data/ledger.html#L53" title="Ledger entry 53: Phase3e A/B: split-KV for draft extend on the three best configs, pass 2">L53</a>. I report the final session because it compares all three workloads against the same stock run. Absolute throughput should not be compared across sessions; paired gains within a session should.</p>
+<h3 id="what-produced-the-gains">What produced the gains</h3>
+<p>Each step below was measured against stock S2 in its own session, using the best configuration for each workload at that point.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Code 1K</th>
+<th>Code 4K</th>
+<th>MT-Bench</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FP8 draft head <a class="cite" href="data/ledger.html#L16" title="Ledger entry 16: Stage1 A/B pass 3 + allocator check (S38 intermittent slowdown)">L16</a></td>
+<td>+15.1%</td>
+<td>not measured</td>
+<td>+18.2%</td>
+</tr>
+<tr>
+<td>Split-KV verification <a class="cite" href="data/ledger.html#L22" title="Ledger entry 22: Stage2 A/B: split-KV verify (#39316 port) x FP8 draft head, 2-step, pass 2">L22</a></td>
+<td>+23.0%</td>
+<td>+40.8%</td>
+<td>+19.3%</td>
+</tr>
+<tr>
+<td>INT4 head with re-tuned depth <a class="cite" href="data/ledger.html#L29" title="Ledger entry 29: Phase0 same-session reference (leaderboard start), pass 2">L29</a> <a class="cite" href="data/ledger.html#L31" title="Ledger entry 31: Phase0 same-session reference (leaderboard start), pass 4">L31</a></td>
+<td>+37.9%</td>
+<td>+48.5%</td>
+<td>+28.0%</td>
+</tr>
+<tr>
+<td>ReplaySSM and deeper drafting <a class="cite" href="data/ledger.html#L36" title="Ledger entry 36: Phase1 A/B: ReplaySSM + depth 3/4/5 (INT4 head, split-KV) vs stock and prior best, pass 2">L36</a></td>
+<td>+44.3%</td>
+<td>+70.6%</td>
+<td>+37.4%</td>
+</tr>
+<tr>
+<td>Reduced draft vocabulary <a class="cite" href="data/ledger.html#L43" title="Ledger entry 43: Phase3b A/B: hot-vocab INT4 draft head (64K/32K) vs stock and current bests, pass 2">L43</a></td>
+<td>+64.3%</td>
+<td>+92.5%</td>
+<td>+57.4%</td>
+</tr>
+<tr>
+<td>FP8 draft layer on Marlin <a class="cite" href="data/ledger.html#L49" title="Ledger entry 49: Phase3d A/B: Marlin-FP8 draft layer vs CUTLASS-FP8 and stock, pass 2">L49</a></td>
+<td>+74.8%</td>
+<td>+103.5%</td>
+<td>+60.7%</td>
+</tr>
+<tr>
+<td>Split-KV draft extend <a class="cite" href="data/ledger.html#L53" title="Ledger entry 53: Phase3e A/B: split-KV for draft extend on the three best configs, pass 2">L53</a></td>
+<td>+75.3%</td>
+<td>+105.3%</td>
+<td>+60.4%</td>
+</tr>
+<tr>
+<td>Context rows and FP8 projection for code, 64K map for chat <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a></td>
+<td><strong>+93.3%</strong></td>
+<td><strong>+109.0%</strong></td>
+<td><strong>+63.8%</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-progression"><span class="cap-num">Table 16.</span> Paired gain over stock after each kept change; each row's baseline is the stock run of its own session, so steps are indicative rather than strictly additive</p>
+<p>The largest single steps were the reduced draft vocabulary, worth about 20 points on every workload, and split-KV for long prompts. ReplaySSM enabled the depth that made the reduced vocabulary pay off. The context rows added the last large step for code.</p>
+<p>All results are for batch size 1 and one request at a time. They say nothing about throughput under concurrent requests or continuous batching.</p>
+<h3 id="what-i-built-and-what-i-reused">What I built and what I reused</h3>
+<p>Most of these gains came from combining pieces, and not all of the pieces are mine. Some are existing SGLang features or open upstream work that I enabled, ported or tuned for this GPU. I want to be clear about which is which.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Origin</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Draft-only FP8 and INT4 output head</td>
+<td>New in this work</td>
+<td>My SGLang implementation; vLLM independently merged a quantized draft head (<a href="https://github.com/vllm-project/vllm/pull/59973" target="_blank" rel="noopener noreferrer">vllm-project/vllm#59973</a>)</td>
+</tr>
+<tr>
+<td>Quantized head combined with a reduced vocabulary</td>
+<td>New in this work</td>
+<td>Also avoids the tied-embedding token-map crash, for which an upstream fix is open (<a href="https://github.com/sgl-project/sglang/pull/42094" target="_blank" rel="noopener noreferrer">sgl-project/sglang#42094</a>)</td>
+</tr>
+<tr>
+<td>Context-augmented draft vocabulary</td>
+<td>New in this work</td>
+<td>Prompt tokens added to the draft head at prefill, single-request only for now</td>
+</tr>
+<tr>
+<td>FP8 copy of the draft's input projection</td>
+<td>New in this work</td>
+<td>Kept for code, left in BF16 for chat</td>
+</tr>
+<tr>
+<td>Split-KV for the draft-extend pass</td>
+<td>New in this work</td>
+<td>My gate; the kernel is SGLang's</td>
+</tr>
+<tr>
+<td>Split-KV verification on CUDA</td>
+<td>Existing, ported</td>
+<td>Open pull request <a href="https://github.com/sgl-project/sglang/pull/39316" target="_blank" rel="noopener noreferrer">sgl-project/sglang#39316</a> by rluisr</td>
+</tr>
+<tr>
+<td>ReplaySSM</td>
+<td>Existing, enabled</td>
+<td>Stock SGLang flag</td>
+</tr>
+<tr>
+<td>FP8 draft layer on Marlin</td>
+<td>Existing, enabled</td>
+<td>Stock SGLang flags</td>
+</tr>
+<tr>
+<td>Reduced draft vocabulary</td>
+<td>Existing, tuned</td>
+<td>The <a href="https://arxiv.org/abs/2502.14856" target="_blank" rel="noopener noreferrer">FR-Spec</a> idea and SGLang's token-map flag; the maps are mine</td>
+</tr>
+<tr>
+<td>FP8 and INT4 Marlin kernels</td>
+<td>Existing</td>
+<td>SGLang's kernels, derived from <a href="https://github.com/IST-DASLab/marlin" target="_blank" rel="noopener noreferrer">IST-DASLab's Marlin</a></td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-origin"><span class="cap-num">Table 17.</span> Which parts of the final configurations are new in this work and which are existing upstream work</p>
+<h2 id="correctness">Correctness</h2>
+<p>Speculative decoding is lossless when every committed token is the target's own greedy choice given the tokens committed before it. I tested exactly that (<a href="code/tests/test_correctness.py">test_correctness.py</a>).</p>
+<p>For every recorded output, the plain target model, without speculation, scores the prompt and output with teacher forcing. Each output token should be the target's top choice, apart from numerical near-ties. Stock speculative decoding itself does not reach 100% on this test, because verification and prefill compute the same logits through slightly different kernels. So stock sets the noise floor, and a configuration fails only if its disagreement rate is significantly higher than stock's.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Final pass</th>
+<th>Code 1K top-1 agreement</th>
+<th>Code 4K</th>
+<th>MT-Bench</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stock S2</td>
+<td>99.54%</td>
+<td>99.51%</td>
+<td>98.89%</td>
+</tr>
+<tr>
+<td>Code configuration</td>
+<td>99.48%</td>
+<td>99.12%</td>
+<td>98.89%</td>
+</tr>
+<tr>
+<td>Chat configuration</td>
+<td>99.41%</td>
+<td>99.22%</td>
+<td>98.97%</td>
+</tr>
+</tbody>
+</table></div>
+<p class="caption" id="table-correctness"><span class="cap-num">Table 18.</span> Share of committed tokens that match the plain target's top choice <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a> (<a href="data/runs/correctness_L75.json">report</a>)</p>
+<p>Every difference from stock had a 95% interval that included zero.</p>
+<p>This is not proof of identical output. Changing the draft changes how many tokens each verification pass processes, and that changes rounding inside the target's BF16 GEMMs. Greedy outputs therefore diverge at near-ties. Across the two final passes, half of the code 1K outputs matched stock exactly, and the average shared prefix was 172 of 256 tokens <a class="cite" href="data/ledger.html#L74" title="Ledger entry 74: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 1">L74</a> <a class="cite" href="data/ledger.html#L75" title="Ledger entry 75: Final confirmation vs stock: context vocab (32K) and 64K map, with/without FP8 draft fc, pass 2">L75</a>. The test shows no measurable increase in disagreement with the target. It does not show equal task quality on other workloads.</p>
+<h2 id="where-the-investigation-goes-next">Where the investigation goes next</h2>
+<p>In rough order of practicality:</p>
+<ol>
+<li><strong>More acceptance for the same draft cost.</strong> The context rows showed that vocabulary coverage still matters. Adding tokens as the response generates them, and choosing the map per request, are small changes</li>
+<li><strong>Split-KV launch selection for SM120.</strong> The kernel's split count and tile sizes were tuned on AMD hardware, and the merge kernel launches only 8 CTAs. The gain is small but nearly free</li>
+<li><strong>Long-context attention.</strong> At 4K, verification attention is still the part of the round that grows with the prompt</li>
+<li><strong>GPU-side speculative bookkeeping.</strong> Removing the 0.7 ms per-round idle means letting the GPU allocate KV slots and update sequence lengths without a round trip to the CPU. That is real architectural work in the scheduler</li>
+<li><strong>A different target precision, as a separate experiment.</strong> An FP8 target would roughly halve the verification floor, but it changes the model's outputs and needs a quality evaluation, not just a speed measurement</li>
+<li><strong>Other GPUs.</strong> Everything here was measured on one laptop. On an L4 or an H100, the balance between draft cost, attention and weight streaming will be different</li>
+</ol>
+<h2 id="lessons-i-would-carry-forward">Lessons I would carry forward</h2>
+<p>A faster kernel is not always a faster inference system. The 12.6x attention kernel moved code 1K by 3%, the 20% faster merge kernel would have moved nothing, and the FP8 GEMM that read half the bytes barely beat BF16 at batch 1.</p>
+<p>The quantity that matters is useful committed tokens divided by total execution time. The trace showed me where the time went. The profiler showed me which kind of limit each kernel had. A quick estimate of each change's share of the round told me whether it could matter before I spent an hour measuring it.</p>
+<h2 id="methodology-notes">Methodology notes</h2>
+<ul>
+<li><strong>Ledger citations:</strong> links such as L53 open entry 53 of the <a href="data/ledger.html">experiment ledger</a>, which lists every run's hypothesis and result in order. The raw records are in <a href="data/ledger.jsonl">ledger.jsonl</a></li>
+<li><strong>Nsight Compute scope:</strong> the only Nsight Compute data is for the three draft-head kernels in <a href="#table-ncu">Table 6</a>, profiled in isolation. Statements about verification GEMMs, attention and the final INT4 head come from CUPTI kernel traces (timestamps and launch configurations) and CUDA-graph timing, not from hardware counters</li>
+<li><strong>Counters not captured:</strong> tensor-pipe utilization and per-SM activity were not measured, so the CUTLASS tiling explanation and the split-KV scheduling diagram describe structure and opportunity rather than measured utilization</li>
+<li><strong>Timeline source:</strong> Nsight Systems could not record GPU activity with the Windows driver available to WSL at the time, so all kernel timelines come from CUPTI through the PyTorch profiler</li>
+<li><strong>Per-round times:</strong> kernel totals in a trace are divided by its 30 recorded rounds. One early ledger entry divided by 29 and reported 1.46 ms instead of 1.41 ms for 1K attention</li>
+<li><strong>Rounding:</strong> paired gains are computed from unrounded ratios, so recomputing them from the rounded ratios shown can differ in the last digit</li>
+</ul>
+<h2 id="evidence-code-and-references">Evidence, code and references</h2>
+<p><strong>Source code and patches</strong></p>
+<ul>
+<li><a href="code/patches/fp8_draft_head.diff">fp8_draft_head.diff</a>: quantized draft head, reduced-vocabulary composition, context rows and the FP8 input projection</li>
+<li><a href="code/patches/splitkv_verify_cuda_pr39316.diff">splitkv_verify_cuda_pr39316.diff</a>: the split-KV gates for verification and draft extend</li>
+<li><a href="code/patches/certified_lm_head.diff">certified_lm_head.diff</a>: the parked exact INT4 head experiment</li>
+<li>The patches apply to an installed SGLang 0.5.21 package copy and modify <a href="https://github.com/sgl-project/sglang" target="_blank" rel="noopener noreferrer">SGLang</a>, which is Apache-2.0 licensed</li>
+</ul>
+<p><strong>Benchmark data</strong></p>
+<ul>
+<li>Harness: <a href="code/scripts/bench.py">bench.py</a>, <a href="code/scripts/compare.py">compare.py</a>, <a href="code/data/build_prompts.py">build_prompts.py</a>, <a href="code/data/build_token_map.py">build_token_map.py</a> and the <a href="code/configs/local.yaml">variant definitions</a></li>
+<li>Paired comparisons: <a href="data/runs/final_vs_stock_L74_L75.txt">final runs</a>, <a href="data/runs/vocab_pooled_L68-L71.txt">vocabulary variants</a>, <a href="data/runs/depth_sweep_L35_L36.txt">depth sweep</a>, <a href="data/runs/draft_extend_splitkv_L52_L53.txt">draft-extend split-KV</a> and <a href="data/runs/adaptive_L64_L65.txt">adaptive depth</a></li>
+<li>Correctness and telemetry: <a href="code/tests/test_correctness.py">test_correctness.py</a>, <a href="data/runs/correctness_L75.json">correctness report</a> and <a href="data/runs/telemetry_L74_L75.txt">power and clock telemetry</a></li>
+<li>The <a href="data/ledger.html">experiment ledger</a></li>
+</ul>
+<p><strong>Profiling evidence</strong></p>
+<ul>
+<li>CUPTI analyses: <a href="data/profiler/analysis_20261024-204832-local_S2.txt">stock round</a>, <a href="data/profiler/analysis_20261026-054627-local_S5K4RH32QMD.txt">final round</a>, <a href="data/profiler/launch_configs.txt">kernel launch configurations</a> and the two <a href="data/profiler/timeline_stock_s2_code1k.json">timeline</a> <a href="data/profiler/timeline_final_code1k.json">extracts</a></li>
+<li>Nsight Compute: <a href="data/profiler/head_ncu_metrics.csv">draft-head metrics</a> exported from the original report</li>
+<li>Isolated benchmarks: <a href="code/profiling/head_bench.py">head_bench.py</a>, <a href="code/profiling/gemm_bench.py">gemm_bench.py</a>, <a href="code/profiling/splitkv_bench.py">splitkv_bench.py</a> and the <a href="data/profiler/head_bench_20261024-215917-head.json">head benchmark results</a></li>
+<li>Extraction scripts: <a href="tools/extract_evidence.py">extract_evidence.py</a> and <a href="tools/vocab_coverage.py">vocab_coverage.py</a>. Raw traces and the 70 MB Nsight Compute report are not included</li>
+</ul>
+<p><strong>External documentation and prior work</strong></p>
+<ul>
+<li><a href="https://github.com/sgl-project/sglang/pull/39316" target="_blank" rel="noopener noreferrer">SGLang pull request 39316</a> by rluisr: split-KV EAGLE verification on CUDA for the Triton backend</li>
+<li><a href="https://github.com/sgl-project/sglang/pull/42094" target="_blank" rel="noopener noreferrer">SGLang pull request 42094</a> by SamMausberg: reduced draft head for tied Qwen3.5 MTP with a token map</li>
+<li><a href="https://github.com/vllm-project/vllm/pull/59973" target="_blank" rel="noopener noreferrer">vLLM pull request 59973</a> by stecasta: quantized draft output head for drafters that share the target head</li>
+<li><a href="https://arxiv.org/abs/2502.14856" target="_blank" rel="noopener noreferrer">FR-Spec</a>: frequency-ranked draft vocabularies for large-vocabulary models</li>
+<li><a href="https://pytorch.org/blog/flash-decoding/" target="_blank" rel="noopener noreferrer">Flash-Decoding for long-context inference</a>: the split-KV and log-sum-exp merge idea</li>
+<li><a href="https://github.com/IST-DASLab/marlin" target="_blank" rel="noopener noreferrer">Marlin</a>: the mixed-precision GEMM design behind SGLang's FP8 and INT4 kernels</li>
+<li><a href="https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/intro-to-cuda-cpp.html" target="_blank" rel="noopener noreferrer">NVIDIA CUDA Programming Guide</a>, <a href="https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html" target="_blank" rel="noopener noreferrer">Nsight Compute Profiling Guide</a> and <a href="https://docs.nvidia.com/cupti/" target="_blank" rel="noopener noreferrer">CUPTI</a></li>
+<li><a href="https://docs.sglang.io/docs/developer_guide/benchmark_and_profiling" target="_blank" rel="noopener noreferrer">SGLang benchmarking and profiling documentation</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen3.5-2B" target="_blank" rel="noopener noreferrer">Qwen3.5-2B model card</a> and the <a href="https://github.com/lm-sys/FastChat/tree/main/fastchat/llm_judge" target="_blank" rel="noopener noreferrer">MT-Bench questions in FastChat</a></li>
+</ul>
+
+</article>
+<aside class="toc-side" aria-label="On this page"><p class="toc-head">On this page</p><ol><li><a href="#the-problem">The Problem</a></li><li><a href="#building-a-baseline-i-could-trust">Building a baseline I could trust</a></li><li><a href="#the-trace-that-exposed-the-first-bottlenecks">The trace that exposed the first bottlenecks</a></li><li><a href="#the-draft-output-head">The draft output head</a></li><li><a href="#nsight-compute-profiling">Nsight Compute Profiling</a></li><li><a href="#split-kv-attention-for-verification">Split-KV attention for verification</a></li><li><a href="#int4-in-the-server-and-the-limit-it-ran-into">INT4 in the server, and the limit it ran into</a></li><li><a href="#replayssm-memory-for-deeper-drafts">ReplaySSM: memory for deeper drafts</a></li><li><a href="#choosing-the-speculative-depth">Choosing the speculative depth</a></li><li><a href="#shrinking-the-draft-vocabulary">Shrinking the draft vocabulary</a></li><li><a href="#two-smaller-changes-on-the-draft-side">Two smaller changes on the draft side</a></li><li><a href="#context-augmented-draft-vocabulary">Context-augmented draft vocabulary</a></li><li><a href="#approaching-the-memory-bandwidth-limit">Approaching the memory-bandwidth limit</a></li><li><a href="#experiments-i-did-not-keep">Experiments I did not keep</a></li><li><a href="#final-results">Final paired results</a></li><li><a href="#correctness">Correctness</a></li><li><a href="#where-the-investigation-goes-next">Where the investigation goes next</a></li><li><a href="#lessons-i-would-carry-forward">Lessons I would carry forward</a></li><li><a href="#methodology-notes">Methodology notes</a></li><li><a href="#evidence-code-and-references">Evidence, code and references</a></li></ol></aside>
+</main>
+<footer class="site-footer">Measured on one RTX 5070 Laptop GPU. Data, code and the full experiment ledger are in this repository.</footer>
+</body>
+</html>

@@ -1,0 +1,99 @@
+{
+ "head_key": "model.language_model.embed_tokens.weight",
+ "shape": [
+  248320,
+  2048
+ ],
+ "n_inputs": 1344,
+ "variants": {
+  "bf16": {
+   "weight_mib": 970.0,
+   "top1_agree": 1.0,
+   "top5_overlap": 1.0,
+   "logit_abs_err_mean": 0.0,
+   "logit_abs_err_max": 0.0,
+   "logit_rel_err": 0.0,
+   "temp_alloc_kib_M1": 485.0,
+   "us_M1": 2939.2,
+   "us_M1_p10_p90": [
+    2926.9,
+    3192.8
+   ],
+   "GBps_M1": 346.1,
+   "temp_alloc_kib_M4": 1940.0,
+   "us_M4": 2771.2,
+   "us_M4_p10_p90": [
+    2762.9,
+    2953.9
+   ],
+   "GBps_M4": 367.0
+  },
+  "w8a8_torch": {
+   "weight_mib": 485.9,
+   "top1_agree": 0.9807,
+   "top5_overlap": 0.9735,
+   "logit_abs_err_mean": 0.0709,
+   "logit_abs_err_max": 0.698,
+   "logit_rel_err": 0.03153,
+   "temp_alloc_kib_M1": 488.5,
+   "us_M1": 1615.4,
+   "us_M1_p10_p90": [
+    1579.6,
+    2183.3
+   ],
+   "GBps_M1": 315.4,
+   "temp_alloc_kib_M4": 1949.5,
+   "us_M4": 1727.4,
+   "us_M4_p10_p90": [
+    1602.3,
+    1885.7
+   ],
+   "GBps_M4": 295.0
+  },
+  "w8a8_sgl": {
+   "weight_mib": 485.9,
+   "top1_agree": 0.9807,
+   "top5_overlap": 0.9735,
+   "logit_abs_err_mean": 0.0709,
+   "logit_abs_err_max": 0.698,
+   "logit_rel_err": 0.03152,
+   "temp_alloc_kib_M1": 487.5,
+   "us_M1": 1595.0,
+   "us_M1_p10_p90": [
+    1565.3,
+    2161.2
+   ],
+   "GBps_M1": 319.5,
+   "temp_alloc_kib_M4": 1948.5,
+   "us_M4": 1710.4,
+   "us_M4_p10_p90": [
+    1597.1,
+    1878.1
+   ],
+   "GBps_M4": 297.9
+  },
+  "w8a16_marlin": {
+   "weight_mib": 485.5,
+   "top1_agree": 0.9821,
+   "top5_overlap": 0.9777,
+   "logit_abs_err_mean": 0.0505,
+   "logit_abs_err_max": 0.641,
+   "logit_rel_err": 0.02253,
+   "temp_alloc_kib_M1": 1061.0,
+   "us_M1": 1514.8,
+   "us_M1_p10_p90": [
+    1498.6,
+    1707.0
+   ],
+   "GBps_M1": 336.1,
+   "temp_alloc_kib_M4": 2516.0,
+   "us_M4": 1423.1,
+   "us_M4_p10_p90": [
+    1414.0,
+    1513.3
+   ],
+   "GBps_M4": 357.7
+  }
+ },
+ "selfcheck_argmax_eq_generated": 1.0
+}

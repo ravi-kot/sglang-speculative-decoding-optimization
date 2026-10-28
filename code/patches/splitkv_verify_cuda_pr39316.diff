@@ -1,0 +1,32 @@
+diff --git a/sglang/srt/layers/attention/triton_backend.py b/sglang/srt/layers/attention/triton_backend.py
+index 914def7..63dec23 100644
+--- a/sglang/srt/layers/attention/triton_backend.py
++++ b/sglang/srt/layers/attention/triton_backend.py
+@@ -225,7 +225,9 @@ class TritonAttnBackend(AttentionBackend):
+         # Split-KV verify is bit-equivalent only for a pure-causal chain (topk==1)
+         # and is gfx95-only; else fall back to extend_attention_fwd.
+         self.use_verify_splitkv = (
+-            is_gfx95_supported()
++            # Port of sgl-project/sglang#39316 (open): the split-KV verify kernel is NV-safe;
++            # opt-in on CUDA here (SGLANG_SPLITKV_VERIFY_ON_CUDA=1) so A/B runs stay separable.
++            (is_gfx95_supported() or __import__("os").environ.get("SGLANG_SPLITKV_VERIFY_ON_CUDA") == "1")
+             and envs.SGLANG_ENABLE_SPLITKV_VERIFY.get()
+             and self.topk == 1
+         )
+@@ -1757,7 +1759,15 @@ class TritonAttnBackend(AttentionBackend):
+         if (
+             verify_fwd is not None
+             and score_mod is None
+-            and forward_batch.forward_mode.is_target_verify()
++            and (
++                forward_batch.forward_mode.is_target_verify()
++                # Draft extend (spec v2) is the same causal prefix+chunk problem; opt-in so A/B
++                # stays separable. can_handle() still rejects anything non-causal/ragged.
++                or (
++                    forward_batch.forward_mode.is_draft_extend_v2()
++                    and __import__("os").environ.get("SGLANG_SPLITKV_DRAFT_EXTEND") == "1"
++                )
++            )
+             and verify_fwd(
+                 q.view(-1, layer.tp_q_head_num, layer.qk_head_dim),
+                 k.contiguous(),

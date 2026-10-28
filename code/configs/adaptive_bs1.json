@@ -1,0 +1,2 @@
+{"ema_alpha": 0.15, "warmup_batches": 5, "update_interval": 8,
+ "1": {"candidate_steps": [3, 5], "up_hysteresis": -0.6, "down_hysteresis": -1.3}}

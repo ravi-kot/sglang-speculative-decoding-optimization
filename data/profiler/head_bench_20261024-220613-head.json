@@ -1,0 +1,121 @@
+{
+ "head_key": "model.language_model.embed_tokens.weight",
+ "shape": [
+  248320,
+  2048
+ ],
+ "n_inputs": 1344,
+ "variants": {
+  "bf16": {
+   "weight_mib": 970.0,
+   "top1_agree": 1.0,
+   "top5_overlap": 1.0,
+   "logit_abs_err_mean": 0.0,
+   "logit_abs_err_max": 0.0,
+   "logit_rel_err": 0.0,
+   "temp_alloc_kib_M1": 485.0,
+   "us_M1": 2926.6,
+   "us_M1_p10_p90": [
+    2748.1,
+    2956.4
+   ],
+   "GBps_M1": 347.5,
+   "temp_alloc_kib_M4": 1940.0,
+   "us_M4": 2766.9,
+   "us_M4_p10_p90": [
+    2762.1,
+    2800.3
+   ],
+   "GBps_M4": 367.6
+  },
+  "w8a8_sgl": {
+   "weight_mib": 485.9,
+   "top1_agree": 0.9807,
+   "top5_overlap": 0.9735,
+   "logit_abs_err_mean": 0.0709,
+   "logit_abs_err_max": 0.698,
+   "logit_rel_err": 0.03152,
+   "temp_alloc_kib_M1": 487.5,
+   "us_M1": 1608.3,
+   "us_M1_p10_p90": [
+    1542.6,
+    2059.6
+   ],
+   "GBps_M1": 316.8,
+   "temp_alloc_kib_M4": 1948.5,
+   "us_M4": 1707.6,
+   "us_M4_p10_p90": [
+    1615.4,
+    1840.5
+   ],
+   "GBps_M4": 298.4
+  },
+  "w8a16_marlin": {
+   "weight_mib": 485.5,
+   "top1_agree": 0.9821,
+   "top5_overlap": 0.9777,
+   "logit_abs_err_mean": 0.0505,
+   "logit_abs_err_max": 0.641,
+   "logit_rel_err": 0.02253,
+   "temp_alloc_kib_M1": 1061.0,
+   "us_M1": 1496.4,
+   "us_M1_p10_p90": [
+    1410.1,
+    1511.5
+   ],
+   "GBps_M1": 340.2,
+   "temp_alloc_kib_M4": 2516.0,
+   "us_M4": 1422.0,
+   "us_M4_p10_p90": [
+    1414.6,
+    1458.2
+   ],
+   "GBps_M4": 358.0
+  },
+  "w8a16_marlin_nofp32": {
+   "weight_mib": 485.5,
+   "top1_agree": 0.9821,
+   "top5_overlap": 0.9777,
+   "logit_abs_err_mean": 0.0505,
+   "logit_abs_err_max": 0.641,
+   "logit_rel_err": 0.02253,
+   "temp_alloc_kib_M1": 485.0,
+   "us_M1": 1495.4,
+   "us_M1_p10_p90": [
+    1408.6,
+    1507.6
+   ],
+   "GBps_M1": 340.4,
+   "temp_alloc_kib_M4": 1940.0,
+   "us_M4": 1418.4,
+   "us_M4_p10_p90": [
+    1412.5,
+    1449.1
+   ],
+   "GBps_M4": 358.9
+  },
+  "w4a16_marlin": {
+   "weight_mib": 250.1,
+   "top1_agree": 0.9382,
+   "top5_overlap": 0.9308,
+   "logit_abs_err_mean": 0.2358,
+   "logit_abs_err_max": 2.82,
+   "logit_rel_err": 0.10505,
+   "temp_alloc_kib_M1": 1061.0,
+   "us_M1": 782.2,
+   "us_M1_p10_p90": [
+    738.2,
+    794.5
+   ],
+   "GBps_M1": 335.2,
+   "temp_alloc_kib_M4": 2516.0,
+   "us_M4": 745.7,
+   "us_M4_p10_p90": [
+    741.0,
+    773.0
+   ],
+   "GBps_M4": 351.6
+  }
+ },
+ "selfcheck_argmax_eq_generated": 1.0
+}

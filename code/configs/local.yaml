@@ -1,0 +1,150 @@
+# Local harness validation only (RTX 5070 Laptop 8 GB, WSL 7 GB RAM). Numbers are never
+# compared with L4/H100. Qwen3.5-2B has the same MTP architecture (1 MTP layer) and tokenizer as 4B.
+name: local
+python: <local-path>   # existing SGLang 0.5.21 venv, unmodified
+model: <local-path>
+model_revision: 15852e8c16360a2fea060d615a32b45270f8a8fc
+env:  # WSL-only toolkit link dir (pip nvidia/cu13 + libcuda link) from gdn_bcg_lab; never used on EC2
+  CUDA_HOME: <local-path>
+  PATH: <local-path>
+  SGLANG_CACHE_DIR: .cache/sglang
+  FLASHINFER_WORKSPACE_BASE: .cache
+  HF_HUB_OFFLINE: "1"
+  # FlashInfer JIT on WSL: nvcc 13.4 vs CUDA 13.0 headers (unsupported override, from norm_lab) + libcuda link dir
+  FLASHINFER_EXTRA_CUDAFLAGS: -DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK
+  FLASHINFER_EXTRA_LDFLAGS: -L<local-path>
+port: 30200
+min_free_mib: 7000          # VRAM gate before every launch (0.85 x 8150 MiB static pool)
+startup_timeout_s: 900
+server_common: [--attention-backend, triton, --context-length, "9216", --mem-fraction-static, "0.85",
+                --max-running-requests, "2", --max-mamba-cache-size, "8"]
+variants:
+  A: []                                         # stock, no speculation
+  B: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3",
+      --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4"]   # official Qwen3.5 MTP flags
+  # stock step sweep (topk 1, draft tokens = steps + 1); B is steps 3
+  S1: [--speculative-algorithm, NEXTN, --speculative-num-steps, "1", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "2"]
+  S2: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"]
+  S4: [--speculative-algorithm, NEXTN, --speculative-num-steps, "4", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "5"]
+  S5: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6"]
+  S2F: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3",
+        --attention-backend, flashinfer]   # SGLang's default backend on SM120/SM89 (overrides server_common triton)
+  AF: [--attention-backend, flashinfer]
+  S1F: [--speculative-algorithm, NEXTN, --speculative-num-steps, "1", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "2", --attention-backend, flashinfer]
+  S3F: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --attention-backend, flashinfer]
+  # Stage 1: draft-only FP8 Marlin lm_head (source overlay <sglang-overlay>, branch fp8-draft-head)
+  S2Fo: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3", --attention-backend, flashinfer],
+         env: {PYTHONPATH: <sglang-overlay>}}   # overlay, patch inactive (parity control)
+  S2F8: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3", --attention-backend, flashinfer],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8}}
+  S3F8: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --attention-backend, flashinfer],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8}}
+  S2o: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"],
+        env: {PYTHONPATH: <sglang-overlay>}}   # Triton (strongest stock), overlay, patch off
+  S28: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"],
+        env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8}}
+  S38: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4"],
+        env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8}}
+  # Stage 2 probe: stock hybrid attention: verify (+draft extend) on FlashInfer prefill path, decode on Triton
+  S2H: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3",
+        --prefill-attention-backend, flashinfer, --decode-attention-backend, triton]
+  S28H: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3",
+                 --prefill-attention-backend, flashinfer, --decode-attention-backend, triton],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8}}
+  # Stage 2: Triton split-KV verify (port of sgl-project/sglang#39316), alone and with the FP8 draft head
+  S2K: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"],
+        env: {PYTHONPATH: <sglang-overlay>, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S28K: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S38K: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4"],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  # Stage 3: INT4 (W4A16 g32 Marlin) draft head + split-KV verify
+  S28K4: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3"],
+          env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S38K4: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4"],
+          env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  # Phase 1: ReplaySSM spec-verify (stock flag) on the best stack; deeper drafts if memory frees
+  S28KR: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: fp8, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S28K4R: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "2", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "3", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S38K4R: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S4K4R: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "4", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "5", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S5K4R: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  # Phase 3a: cuBLASLt preferred for BF16 GEMMs (PyTorch env, config-only)
+  S38K4RL: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", TORCH_BLAS_PREFER_CUBLASLT: "1"}}
+  S5K4RL: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", TORCH_BLAS_PREFER_CUBLASLT: "1"}}
+  # Phase 3b: hot-vocab draft head (FR-Spec rows of the tied head) quantized INT4, on the winning stack
+  S5K4RH: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S38K4RH: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S5K4RH32: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  # Phase 3c: draft (MTP layer) weights FP8 via stock --speculative-draft-model-quantization; target stays BF16
+  S5K4RH32Q: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S38K4RHQ: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  S6K4RH32Q: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "6", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "7", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1"}}
+  # Phase 3d: FP8 draft layer on Marlin W8A16 (stock env SGLANG_FORCE_FP8_MARLIN; only the draft is FP8-quantized)
+  S5K4RH32QM: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1"}}
+  S6K4RH32QM: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "6", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "7", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1"}}
+  S38K4RHQM: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1"}}
+  S7K4RH32QM: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "7", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "8", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1"}}
+  # Phase 3e: split-KV kernel also for draft extend (overlay, env-gated)
+  S5K4RH32QMD: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  S6K4RH32QMD: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "6", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "7", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  S38K4RHQMD: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  # adaptive depth (stock --speculative-adaptive): 3 <-> 5 steps at ~1.5 correct drafts/round (configs/adaptive_bs1.json)
+  S5A35: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8,
+                  --speculative-adaptive, --speculative-adaptive-config, configs/adaptive_bs1.json],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  S3A35: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8,
+                  --speculative-adaptive, --speculative-adaptive-config, configs/adaptive_bs1.json],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  # 5 steps with the 64K hot map (separates map vs depth on MT-Bench)
+  S5K4RHQMD: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1"}}
+  # context-augmented draft vocabulary: + 256 BF16 rows of the prompt's out-of-map tokens (overlay)
+  S5K4RH32QMDC: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1", SGLANG_DRAFT_CONTEXT_VOCAB: "256"}}
+  S5K4RHQMDC: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1", SGLANG_DRAFT_CONTEXT_VOCAB: "256"}}
+  # + FP8 Marlin copy of the MTP fc projection (INT4 tried: accept -0.23 on mtbench) (SGLANG_DRAFT_FC_QUANT, overlay; BF16 nn.Linear otherwise)
+  S5K4RH32QMDCF: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_32768.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1", SGLANG_DRAFT_CONTEXT_VOCAB: "256", SGLANG_DRAFT_FC_QUANT: fp8}}
+  S5K4RHQMDF: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_65536.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1", SGLANG_DRAFT_FC_QUANT: fp8}}
+  # 48K map blended 50/50 corpus frequency / BPE merge rank (build_token_map.py --mix 0.5) + context rows
+  S5K4RB48QMDC: {flags: [--speculative-algorithm, NEXTN, --speculative-num-steps, "5", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "6", --enable-linear-replayssm-spec, --speculative-token-map, data/token_maps/hot_49152_mix0.5.pt, --speculative-draft-model-quantization, fp8],
+         env: {PYTHONPATH: <sglang-overlay>, SGLANG_DRAFT_LM_HEAD_QUANT: int4, SGLANG_SPLITKV_VERIFY_ON_CUDA: "1", SGLANG_FORCE_FP8_MARLIN: "1", SGLANG_SPLITKV_DRAFT_EXTEND: "1", SGLANG_DRAFT_CONTEXT_VOCAB: "256"}}
+  # stock FR-Spec reduced draft vocabulary (data/build_token_map.py), on top of B
+  M32: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4",
+        --speculative-token-map, data/token_maps/hot_32768.pt]
+  M64: [--speculative-algorithm, NEXTN, --speculative-num-steps, "3", --speculative-eagle-topk, "1", --speculative-num-draft-tokens, "4",
+        --speculative-token-map, data/token_maps/hot_65536.pt]
+sampling: {temperature: 0}
+warmup: 2
+rounds: 1
+workloads:
+  - {name: mtbench, set: mtbench, output_len: 256, n: 4}
+  - {name: gut_1k, set: gutenberg_1024, output_len: 256, n: 2}
+  - {name: code_1k, set: agentic_code_1024, output_len: 256, n: 6}
+# 4K+ does not fit locally with NEXTN: B's KV pool is 2584 tokens (draft weights + spec state
+# buffers on 8 GB); requests are aborted by SGLang. Long context is validated on L4 only.
+  - {name: code_4k, set: agentic_code_4096, output_len: 256, n: 4}
+profile_workload: code_1k

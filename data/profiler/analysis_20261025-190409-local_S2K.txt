@@ -1,0 +1,29 @@
+trace experiments/runs/20261025-190409-local//traces/20261025-190409-local/S2K/1792980377.608984-TP-0.trace.json.gz
+window 603.29 ms | GPU busy (merged) 577.34 ms | idle 25.95 ms (4.3%)
+activities 13293 | graph launches 90 (kernels/launch: {26: 30, 298: 30, 21: 30})
+rounds 29 | round p50 19969.3 us = target 12057.6 + draft 6975.5 + eager 223.7 + idle host-late 0.0 + idle dep/sync 686.7
+idle attributed to the activity that ends the gap (us):
+  eager   dep/sync      18999.2  (3.1% of window)
+  eager   host_late      4225.1  (0.7% of window)
+  target  dep/sync       1384.8  (0.2% of window)
+  draft   dep/sync        463.9  (0.1% of window)
+  draft   host_late       276.3  (0.0% of window)
+exposed GPU time by kind (us): target 361447, draft 209182, eager 6708
+top exposed activities:
+   333786.0 us  55.3%  target void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+   178774.1 us  29.6%  draft  std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int,
+    15440.9 us   2.6%  draft  _fwd_kernel
+    11009.2 us   1.8%  draft  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+     8344.2 us   1.4%  target _verify_prefix_stage1
+     8306.9 us   1.4%  target fused_sigmoid_gating_delta_rule_update_kernel
+     2686.6 us   0.4%  target kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRM
+     2258.7 us   0.4%  target _verify_combine_stage2
+     2094.0 us   0.3%  draft  _fwd_grouped_kernel_stage1
+     1980.4 us   0.3%  eager  _fused_mamba_state_scatter_with_mask_kernel
+largest idle gaps:
+    1740.6 us before eager  host_late=True assign_req_to_token_pool via cuLaunchKernelEx
+     414.5 us before eager  host_late=True _gather_rows_kernel via cuLaunchKernelEx
+     405.4 us before eager  host_late=True void at::native::index_elementwise_kernel<128, 4, at::native via cudaLaunchKernel
+     339.8 us before eager  host_late=True assign_draft_cache_locs_contiguous via cuLaunchKernelEx
+     276.3 us before draft  host_late=True memcpy32_post via cudaGraphLaunch
+     212.1 us before eager  host_late=True void at::native::vectorized_elementwise_kernel<2, at::native via cudaLaunchKernel

@@ -1,0 +1,29 @@
+trace experiments/runs/20261025-185811-local//traces/20261025-185811-local/S2/1792980009.7680235-TP-0.trace.json.gz
+window 726.62 ms | GPU busy (merged) 698.11 ms | idle 28.51 ms (3.9%)
+activities 13113 | graph launches 90 (kernels/launch: {26: 30, 292: 30, 21: 30})
+rounds 29 | round p50 24136.6 us = target 16141.5 + draft 6941.1 + eager 215.3 + idle host-late 0.0 + idle dep/sync 789.5
+idle attributed to the activity that ends the gap (us):
+  eager   dep/sync      22786.1  (3.1% of window)
+  eager   host_late      3072.3  (0.4% of window)
+  target  dep/sync       1249.9  (0.2% of window)
+  draft   dep/sync        698.7  (0.1% of window)
+  draft   host_late       113.4  (0.0% of window)
+exposed GPU time by kind (us): target 483453, draft 208174, eager 6484
+top exposed activities:
+   334033.3 us  46.0%  target void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+   178637.4 us  24.6%  draft  std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int,
+   133230.9 us  18.3%  target _fwd_kernel
+    14813.7 us   2.0%  draft  _fwd_kernel
+    10934.7 us   1.5%  draft  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+     7890.6 us   1.1%  target fused_sigmoid_gating_delta_rule_update_kernel
+     2548.2 us   0.4%  target kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRM
+     2037.8 us   0.3%  eager  _fused_mamba_state_scatter_with_mask_kernel
+     2014.4 us   0.3%  draft  _fwd_grouped_kernel_stage1
+     1445.3 us   0.2%  target _causal_conv1d_update_kernel
+largest idle gaps:
+    1448.2 us before eager  host_late=True assign_req_to_token_pool via cuLaunchKernelEx
+     284.9 us before eager  host_late=False void at::native::unrolled_elementwise_kernel<at::native::dir via cudaLaunchKernel
+     283.3 us before eager  host_late=True void at::native::index_elementwise_kernel<128, 4, at::native via cudaLaunchKernel
+     276.8 us before eager  host_late=True assign_draft_cache_locs_contiguous via cuLaunchKernelEx
+     258.6 us before eager  host_late=True _gather_rows_kernel via cuLaunchKernelEx
+     235.5 us before eager  host_late=True _small_copy_kernel via cuLaunchKernelEx

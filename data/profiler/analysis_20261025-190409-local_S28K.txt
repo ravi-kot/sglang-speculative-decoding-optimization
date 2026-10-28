@@ -1,0 +1,29 @@
+trace experiments/runs/20261025-190409-local//traces/20261025-190409-local/S28K/1792980543.428409-TP-0.trace.json.gz
+window 519.73 ms | GPU busy (merged) 494.47 ms | idle 25.26 ms (4.9%)
+activities 13293 | graph launches 90 (kernels/launch: {26: 30, 298: 30, 21: 30})
+rounds 29 | round p50 17178.5 us = target 12026.0 + draft 4239.2 + eager 223.9 + idle host-late 0.0 + idle dep/sync 675.3
+idle attributed to the activity that ends the gap (us):
+  eager   dep/sync      18446.8  (3.5% of window)
+  eager   host_late      3840.5  (0.7% of window)
+  target  dep/sync       1543.9  (0.3% of window)
+  draft   dep/sync        614.0  (0.1% of window)
+  draft   host_late       235.2  (0.0% of window)
+exposed GPU time by kind (us): target 360663, draft 127081, eager 6724
+top exposed activities:
+   333623.2 us  64.2%  target void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+    86435.4 us  16.6%  draft  void sglang::device::marlin::Marlin<__nv_bfloat16, 2814749767172868l, 
+    15118.8 us   2.9%  draft  _fwd_kernel
+    10984.8 us   2.1%  draft  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+    10545.5 us   2.0%  draft  std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int,
+     8262.8 us   1.6%  target _verify_prefix_stage1
+     8104.5 us   1.6%  target fused_sigmoid_gating_delta_rule_update_kernel
+     2614.4 us   0.5%  target kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRM
+     2165.4 us   0.4%  target _verify_combine_stage2
+     2070.6 us   0.4%  draft  _fwd_grouped_kernel_stage1
+largest idle gaps:
+    1509.3 us before eager  host_late=True assign_req_to_token_pool via cuLaunchKernelEx
+     444.8 us before eager  host_late=True void at::native::index_elementwise_kernel<128, 4, at::native via cudaLaunchKernel
+     321.4 us before eager  host_late=True assign_draft_cache_locs_contiguous via cuLaunchKernelEx
+     304.9 us before eager  host_late=True _gather_rows_kernel via cuLaunchKernelEx
+     235.2 us before draft  host_late=True memcpy32_post via cudaGraphLaunch
+     232.3 us before eager  host_late=True _small_copy_kernel via cuLaunchKernelEx

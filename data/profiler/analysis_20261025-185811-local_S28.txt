@@ -1,0 +1,29 @@
+trace experiments/runs/20261025-185811-local//traces/20261025-185811-local/S28/1792980168.7904155-TP-0.trace.json.gz
+window 640.84 ms | GPU busy (merged) 611.81 ms | idle 29.03 ms (4.5%)
+activities 13113 | graph launches 90 (kernels/launch: {26: 30, 292: 30, 21: 30})
+rounds 29 | round p50 21270.4 us = target 15976.4 + draft 4193.5 + eager 212.9 + idle host-late 0.0 + idle dep/sync 888.0
+idle attributed to the activity that ends the gap (us):
+  eager   dep/sync      23664.5  (3.7% of window)
+  eager   host_late      2676.4  (0.4% of window)
+  target  dep/sync       1259.9  (0.2% of window)
+  draft   dep/sync        746.7  (0.1% of window)
+  draft   host_late       123.4  (0.0% of window)
+exposed GPU time by kind (us): target 479585, draft 125792, eager 6433
+top exposed activities:
+   333890.7 us  52.1%  target void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+   130011.4 us  20.3%  target _fwd_kernel
+    86296.3 us  13.5%  draft  void sglang::device::marlin::Marlin<__nv_bfloat16, 2814749767172868l, 
+    14189.5 us   2.2%  draft  _fwd_kernel
+    10975.8 us   1.7%  draft  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+    10534.8 us   1.6%  draft  std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int,
+     7659.0 us   1.2%  target fused_sigmoid_gating_delta_rule_update_kernel
+     2443.3 us   0.4%  target kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRM
+     1984.0 us   0.3%  draft  _fwd_grouped_kernel_stage1
+     1966.7 us   0.3%  eager  _fused_mamba_state_scatter_with_mask_kernel
+largest idle gaps:
+    1553.6 us before eager  host_late=True assign_req_to_token_pool via cuLaunchKernelEx
+     214.1 us before eager  host_late=True assign_draft_cache_locs_contiguous via cuLaunchKernelEx
+     212.1 us before eager  host_late=True void at::native::index_elementwise_kernel<128, 4, at::native via cudaLaunchKernel
+     195.4 us before eager  host_late=True _gather_rows_kernel via cuLaunchKernelEx
+     139.8 us before eager  host_late=False Memcpy DtoD (Device -> Device) via cudaMemcpyAsync
+     132.1 us before eager  host_late=True _small_copy_kernel via cuLaunchKernelEx

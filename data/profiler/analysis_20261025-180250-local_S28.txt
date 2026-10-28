@@ -1,0 +1,29 @@
+trace experiments/runs/20261025-180250-local//traces/20261025-180250-local/S28/1792976871.4732957-TP-0.trace.json.gz
+window 538.01 ms | GPU busy (merged) 513.09 ms | idle 24.93 ms (4.6%)
+activities 13113 | graph launches 90 (kernels/launch: {26: 30, 292: 30, 21: 30})
+rounds 29 | round p50 17798.3 us = target 13081.0 + draft 3829.9 + eager 204.0 + idle host-late 0.0 + idle dep/sync 663.9
+idle attributed to the activity that ends the gap (us):
+  eager   dep/sync      18193.9  (3.4% of window)
+  eager   host_late      3686.6  (0.7% of window)
+  target  dep/sync       1602.1  (0.3% of window)
+  draft   dep/sync        706.1  (0.1% of window)
+  draft   host_late       167.8  (0.0% of window)
+exposed GPU time by kind (us): target 392074, draft 114900, eager 6113
+top exposed activities:
+   333868.2 us  62.1%  target void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+    86248.7 us  16.0%  draft  void sglang::device::marlin::Marlin<__nv_bfloat16, 2814749767172868l, 
+    42100.8 us   7.8%  target _fwd_kernel
+    11269.5 us   2.1%  draft  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_1
+    10518.0 us   2.0%  draft  std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int,
+     7870.5 us   1.5%  target fused_sigmoid_gating_delta_rule_update_kernel
+     4368.4 us   0.8%  draft  _fwd_kernel
+     2515.0 us   0.5%  target kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRM
+     1962.0 us   0.4%  eager  _fused_mamba_state_scatter_with_mask_kernel
+     1435.3 us   0.3%  target _causal_conv1d_update_kernel
+largest idle gaps:
+    1525.8 us before eager  host_late=True assign_req_to_token_pool via cuLaunchKernelEx
+     364.9 us before eager  host_late=True void at::native::index_elementwise_kernel<128, 4, at::native via cudaLaunchKernel
+     323.6 us before eager  host_late=True assign_draft_cache_locs_contiguous via cuLaunchKernelEx
+     317.0 us before eager  host_late=True _gather_rows_kernel via cuLaunchKernelEx
+     243.1 us before eager  host_late=True _small_copy_kernel via cuLaunchKernelEx
+     218.0 us before target host_late=False void at::native::(anonymous namespace)::indexSelectSmallInde via cudaGraphLaunch

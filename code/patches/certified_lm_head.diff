@@ -1,0 +1,175 @@
+diff --git a/sglang/srt/layers/certified_lm_head.py b/sglang/srt/layers/certified_lm_head.py
+new file mode 100644
+index 0000000..e7a5b99
+--- /dev/null
++++ b/sglang/srt/layers/certified_lm_head.py
+@@ -0,0 +1,128 @@
++"""Certified-exact target LM head for greedy speculative verify (SGLANG_CERTIFIED_LM_HEAD=1).
++
++Verify computes [M, V] target logits only to take a greedy argmax, yet at batch 1 it streams
++the whole BF16 head ([248320, 2048] tied embedding, 1.02 GB) from DRAM each round. Here:
++
++  1. approx = h . Wq with an INT4 g32 copy of the head (GPTQ-Marlin W4A16, ~0.28 GB).
++  2. ub_i = approx_i + sum_g ||(W - Wq)_ig|| * ||h_g|| + rounding margin (Cauchy-Schwarz per
++     group; the error norms are precomputed, rounded up). lo = max_i (2 approx_i - ub_i) is a
++     lower bound on the true max logit, so only tokens with ub_i >= lo can be the argmax.
++  3. One Triton pass over vocab blocks computes exact BF16 logits (BF16 inputs, FP32 accumulate,
++     rounded to BF16 as the stock cuBLAS head) for blocks holding any candidate and writes -inf
++     elsewhere; blocks without candidates read no weights.
++
++The argmax is the stock one by construction (up to the BF16 GEMM accumulation-order differences
++the stock path already has between batch shapes): there is no top-K cap and no fallback. Static
++shapes, so it is captured in the verify CUDA graph. Only for greedy verify; other modes and the
++draft are untouched.
++"""
++
++import logging
++import os
++
++import torch
++import triton
++import triton.language as tl
++
++logger = logging.getLogger(__name__)
++
++BOUND_GROUP = int(os.environ.get("SGLANG_CERTIFIED_BOUND_GROUP", "32"))
++
++
++def certified_lm_head_enabled():
++    return os.environ.get("SGLANG_CERTIFIED_LM_HEAD", "") == "1"
++
++
++@triton.jit
++def _bound_kernel(approx_ptr, hn_ptr, en_ptr, ub_ptr, lo_ptr, V, M: tl.constexpr, NG: tl.constexpr,
++                  BLOCK_V: tl.constexpr):
++    pid = tl.program_id(0)
++    offs_v = pid * BLOCK_V + tl.arange(0, BLOCK_V)
++    vmask = offs_v < V
++    offs_g = tl.arange(0, NG)
++    en = tl.load(en_ptr + offs_v[:, None] * NG + offs_g[None, :], mask=vmask[:, None], other=0.0).to(tl.float32)
++    for m in tl.static_range(M):
++        hn = tl.load(hn_ptr + m * NG + offs_g)
++        b = tl.sum(en * hn[None, :], axis=1)
++        a = tl.load(approx_ptr + m * V + offs_v, mask=vmask, other=0.0).to(tl.float32)
++        # BF16 rounding of approx and of the stock exact logit (2 x 2^-8 rel) + FP32 accumulation
++        ub = a + b + tl.abs(a) * 0.015625 + 0.05
++        tl.store(ub_ptr + m * V + offs_v, ub, mask=vmask)
++        tl.atomic_max(lo_ptr + m, tl.max(tl.where(vmask, 2 * a - ub, float("-inf")), axis=0))
++
++
++@triton.jit
++def _exact_kernel(h_ptr, w_ptr, ub_ptr, lo_ptr, out_ptr, V, K: tl.constexpr, M: tl.constexpr,
++                  BLOCK_M: tl.constexpr, BLOCK_V: tl.constexpr, BLOCK_K: tl.constexpr):
++    pid = tl.program_id(0)
++    offs_m = tl.arange(0, BLOCK_M)
++    offs_v = pid * BLOCK_V + tl.arange(0, BLOCK_V)
++    mmask = offs_m < M
++    vmask = offs_v < V
++    ub = tl.load(ub_ptr + offs_m[:, None] * V + offs_v[None, :], mask=mmask[:, None] & vmask[None, :],
++                 other=float("-inf"))
++    lo = tl.load(lo_ptr + offs_m, mask=mmask, other=float("inf"))
++    act = ub >= lo[:, None]
++    out = tl.full([BLOCK_M, BLOCK_V], float("-inf"), tl.float32)
++    if tl.max(act.to(tl.int32)) > 0:
++        acc = tl.zeros([BLOCK_M, BLOCK_V], tl.float32)
++        offs_k = tl.arange(0, BLOCK_K)
++        for k in range(0, K, BLOCK_K):
++            h = tl.load(h_ptr + offs_m[:, None] * K + k + offs_k[None, :], mask=mmask[:, None], other=0.0)
++            w = tl.load(w_ptr + offs_v[:, None] * K + k + offs_k[None, :], mask=vmask[:, None], other=0.0)
++            acc = tl.dot(h, tl.trans(w), acc)
++        out = tl.where(act, acc.to(tl.bfloat16).to(tl.float32), out)
++    tl.store(out_ptr + offs_m[:, None] * V + offs_v[None, :], out, mask=mmask[:, None] & vmask[None, :])
++
++
++class CertifiedLMHead:
++    def __init__(self, weight: torch.Tensor):
++        from sglang.srt.speculative.draft_lm_head_quant import Int4MarlinDraftHead
++        from sglang.test.test_marlin_utils import marlin_quantize
++        from sgl_kernel.scalar_type import scalar_types
++
++        assert weight.dtype == torch.bfloat16 and weight.is_contiguous()
++        V, K = weight.shape
++        G = BOUND_GROUP
++        assert K % G == 0 and (K // G) & (K // G - 1) == 0
++        self.weight, self.V, self.K, self.NG = weight, V, K, K // G
++        self.qhead = Int4MarlinDraftHead(weight)
++        en = torch.empty(V, K // G, dtype=torch.float16, device=weight.device)
++        step = 7760
++        with torch.no_grad():
++            for i in range(0, V, step):
++                w = weight[i : i + step]
++                wq = marlin_quantize(w.t().contiguous(), scalar_types.uint4b8, 32, False)[0].t()
++                e = (w.float() - wq.float()).view(-1, K // G, G).norm(dim=2)
++                # round up so the stored FP16 norms never undercut the true error norm
++                en[i : i + step] = (e * (1 + 2.0 ** -9) + 1e-7).to(torch.float16)
++        self.en = en
++        torch.cuda.empty_cache()
++
++    def __call__(self, h: torch.Tensor) -> torch.Tensor:
++        M, K = h.shape
++        h = h.contiguous()
++        approx = self.qhead.quant_method.apply(self.qhead, h)  # [M, V] BF16
++        hn = h.float().view(M, self.NG, -1).norm(dim=2) * (1 + 2.0 ** -20)
++        ub = torch.empty(M, self.V, dtype=torch.float32, device=h.device)
++        lo = torch.full((M,), float("-inf"), dtype=torch.float32, device=h.device)
++        _bound_kernel[(triton.cdiv(self.V, 128),)](approx, hn, self.en, ub, lo, self.V, M=M, NG=self.NG,
++                                                    BLOCK_V=128)
++        out = torch.empty(M, self.V, dtype=torch.float32, device=h.device)
++        _exact_kernel[(triton.cdiv(self.V, 64),)](h, self.weight, ub, lo, out, self.V, K=K, M=M,
++                                                   BLOCK_M=max(16, triton.next_power_of_2(M)), BLOCK_V=64,
++                                                   BLOCK_K=128, num_warps=4)
++        return out
++
++
++def maybe_attach_certified_lm_head(model) -> None:
++    if not certified_lm_head_enabled():
++        return
++    lm_head = getattr(model, "lm_head", None)
++    weight = getattr(lm_head, "weight", None)
++    if weight is None or weight.dtype != torch.bfloat16 or weight.dim() != 2:
++        raise ValueError("SGLANG_CERTIFIED_LM_HEAD: target lm_head is not a BF16 matrix")
++    before = torch.cuda.memory_allocated()
++    lm_head._certified_head = CertifiedLMHead(weight)
++    logger.info("Certified LM head: INT4 g32 screen + exact candidate pass for %s, +%.0f MiB.",
++                tuple(weight.shape), (torch.cuda.memory_allocated() - before) / 2**20)
+diff --git a/sglang/srt/layers/logits_processor.py b/sglang/srt/layers/logits_processor.py
+index 77b47df..8fd9926 100644
+--- a/sglang/srt/layers/logits_processor.py
++++ b/sglang/srt/layers/logits_processor.py
+@@ -898,8 +898,19 @@ class LogitsProcessor(nn.Module):
+             if self.do_tensor_parallel_all_gather_dp_attn
+             else LoRABatchLayout.DP_LOCAL
+         )
+-        with get_forward().scoped(lora_batch_layout=lora_batch_layout):
+-            logits = self._compute_lm_head(hidden_states, lm_head, embedding_bias)
++        certified = getattr(lm_head, "_certified_head", None)
++        if (
++            certified is not None
++            and logits_metadata.forward_mode.is_target_verify()
++            and embedding_bias is None
++            and self.logit_scale is None
++            and not self.final_logit_softcapping
++            and not self.do_tensor_parallel_all_gather
++        ):
++            logits = certified(hidden_states)  # exact greedy argmax; see certified_lm_head.py
++        else:
++            with get_forward().scoped(lora_batch_layout=lora_batch_layout):
++                logits = self._compute_lm_head(hidden_states, lm_head, embedding_bias)
+         _trace_e2e_logits("lm_head_returned", logits_shape=tuple(logits.shape))
+         if envs.SGLANG_TRACE_LOGITS_E2E_SYNC.get():
+             _trace_e2e_logits("post_lm_head_sync_enter")
+diff --git a/sglang/srt/model_executor/model_runner.py b/sglang/srt/model_executor/model_runner.py
+index 604a72f..6aca261 100644
+--- a/sglang/srt/model_executor/model_runner.py
++++ b/sglang/srt/model_executor/model_runner.py
+@@ -652,6 +652,10 @@ class ModelRunner:
+         self.init_token_oracle()
+         self.sampler = create_sampler()
+         self.load_model()
++        if not self.is_draft_worker:
++            from sglang.srt.layers.certified_lm_head import maybe_attach_certified_lm_head
++
++            maybe_attach_certified_lm_head(self.model)
+         prepare_moe_topk(model=self.model, model_config=self.model_config)
+ 
+         self.maybe_init_dwdp()

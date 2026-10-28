@@ -1,0 +1,6 @@
+# Share of stock target output tokens outside the draft vocabulary (lower is better)
+# outputs: stock S2, runs 20261026-050219-local, 20261026-052114-local
+workload  tokens  32K corpus  64K corpus   48K blend  32K+prompt  misses in prompt  max prompt rows
+mtbench     1624      12.81%       2.71%       4.06%      11.82%                8%                7
+code_1k     3072       3.71%       1.24%       2.99%       0.91%               75%               38
+code_4k     2048       2.34%       0.59%       1.95%       1.27%               46%               67
