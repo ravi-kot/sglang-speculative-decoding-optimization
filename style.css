@@ -35,7 +35,13 @@ a:hover { color: var(--teal-hover); }
   min-height: 72px; border-bottom: 1px solid var(--border);
 }
 .site a { font: 700 1.15rem/1 var(--serif); letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
-.site span { color: var(--muted); font-size: 0.74rem; letter-spacing: 0.13em; text-transform: uppercase; }
+.site .repo-link {
+  font: 650 0.74rem/1 var(--sans);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.site .repo-link:hover { color: var(--teal); }
 article { min-width: 0; }
 
 /* title block */

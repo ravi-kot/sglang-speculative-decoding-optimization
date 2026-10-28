@@ -192,7 +192,7 @@ page = f"""<!doctype html>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="site"><a href="index.html">Ravi Kothari</a><span>GPU inference notes</span></header>
+<header class="site"><a class="brand" href="index.html">Ravi Kothari</a><a class="repo-link" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization" target="_blank" rel="noopener noreferrer">GitHub repository</a></header>
 <main>
 <article>
 <header class="post">
