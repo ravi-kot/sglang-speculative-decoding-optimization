@@ -1,0 +1,16 @@
+session,arm_mode,identical,turns,first_divergent_token_median,first_divergent_fraction,tool_calls,malformed,source
+s13,stk_off_hold,44,64,18.5,0.424,64,0,raw\s13\div_off.txt
+s13,a16c_off_hold,45,64,23.0,0.506,64,0,raw\s13\div_off.txt
+s13,a16v_off_hold,46,64,22.0,0.474,64,0,raw\s13\div_off.txt
+s13,stk_on_hold,18,34,9.5,0.101,33,0,raw\s13\div_on.txt
+s13,a16c_on_hold,31,64,15.0,0.179,63,0,raw\s13\div_on.txt
+s13,a16v_on_hold,31,64,38.0,0.179,62,0,raw\s13\div_on.txt
+s13,b8on_on_hold,32,64,20.0,0.187,62,0,raw\s13\div_on.txt
+s15,a16a_off_hold,46,64,22.0,0.474,64,0,raw\s15\div15_off.txt
+s15,a24v_off_hold,50,64,19.5,0.428,64,0,raw\s15\div15_off.txt
+s15,a16a_on_hold,31,64,38.0,0.179,62,0,raw\s15\div15_on.txt
+s15,a24v_on_hold,31,64,10.0,0.073,61,0,raw\s15\div15_on.txt
+s17,a16v_off_hold,46,64,22.0,0.474,64,0,raw\s17\div17_off.txt
+s17,a24l_off_hold,50,64,21.5,0.472,64,0,raw\s17\div17_off.txt
+s17,a16v_on_hold,31,64,38.0,0.179,62,0,raw\s17\div17_on.txt
+s17,a24l_on_hold,31,64,11.0,0.103,62,0,raw\s17\div17_on.txt

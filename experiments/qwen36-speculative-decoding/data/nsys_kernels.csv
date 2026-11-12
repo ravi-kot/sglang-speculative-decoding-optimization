@@ -1,0 +1,559 @@
+profile,config,regime,context_approx,kernel,ms_per_step
+n16,"block 16",1,~18K,_step_total,10.7
+n16,"block 16",1,~18K,_gaps,0.431
+n16,"block 16",1,~18K,fused_moe_kernel,4.942
+n16,"block 16",1,~18K,"cublas(8,485,1)",0.683
+n16,"block 16",1,~18K,BatchPrefillWithPagedKVCacheKern,0.564
+n16,"block 16",1,~18K,s5_ba_kernel,0.425
+n16,"block 16",1,~18K,"cutlass_gemm(1,32,1)",0.345
+n16,"block 16",1,~18K,"cutlass_gemm(1,192,1)",0.251
+n16,"block 16",1,~18K,bole_solve_kernel,0.239
+n16,"block 16",1,~18K,per_token_group_quant_flat_kerne,0.238
+n16,"block 16",1,~18K,"cublas(8,96,1)",0.228
+n16,"block 16",1,~18K,kernel_cutlass_kernel_flashinf_1,0.211
+n16,"block 16",1,~18K,_causal_conv1d_update_kernel,0.173
+n16,"block 16",1,~18K,bole_factor_kernel,0.161
+n16,"block 16",1,~18K,"cutlass_gemm(1,144,1)",0.151
+n16,"block 16",1,~18K,"cublas(8,188,1)",0.145
+n16,"block 16",1,~18K,"cublas(8,48,1)",0.131
+n16,"block 16",1,~18K,"cublas(8,8,32)",0.124
+n16,"block 16",1,~18K,splitKreduce_kernel,0.119
+n16,"block 16",1,~18K,moe_align_block_size_kernel,0.097
+n16,"block 16",1,~18K,act_and_mul_kernel,0.094
+n16,"block 16",1,~18K,_router_triton_kernel,0.089
+n16,"block 16",1,~18K,PersistentVariableLengthMergeSta,0.083
+n16,"block 16",1,~18K,"cublas(8,8,22)",0.082
+n16,"block 16",1,~18K,vectorized_elementwise_kernel,0.081
+n16,"block 16",1,~18K,_moe_sum_reduce_kernel,0.055
+n16,"block 16",1,~18K,fused_qkvzba_split_reshape_cat_1,0.054
+n16,"block 16",1,~18K,_layer_norm_fwd_1pass_kernel,0.053
+n16,"block 16",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.049
+n16,"block 16",1,~18K,count_and_sort_expert_tokens_ker,0.047
+n16,"block 16",1,~18K,"cublas(8,2,11)",0.046
+n16,"block 16",2,~101K,_step_total,12.97
+n16,"block 16",2,~101K,_gaps,0.615
+n16,"block 16",2,~101K,fused_moe_kernel,6.145
+n16,"block 16",2,~101K,BatchPrefillWithPagedKVCacheKern,1.534
+n16,"block 16",2,~101K,"cublas(8,485,1)",0.682
+n16,"block 16",2,~101K,s5_ba_kernel,0.408
+n16,"block 16",2,~101K,"cutlass_gemm(1,32,1)",0.336
+n16,"block 16",2,~101K,"cutlass_gemm(1,192,1)",0.25
+n16,"block 16",2,~101K,bole_solve_kernel,0.233
+n16,"block 16",2,~101K,per_token_group_quant_flat_kerne,0.233
+n16,"block 16",2,~101K,"cublas(8,96,1)",0.227
+n16,"block 16",2,~101K,kernel_cutlass_kernel_flashinf_1,0.208
+n16,"block 16",2,~101K,_causal_conv1d_update_kernel,0.169
+n16,"block 16",2,~101K,bole_factor_kernel,0.155
+n16,"block 16",2,~101K,"cutlass_gemm(1,144,1)",0.148
+n16,"block 16",2,~101K,"cublas(8,188,1)",0.145
+n16,"block 16",2,~101K,"cublas(8,48,1)",0.13
+n16,"block 16",2,~101K,"cublas(8,8,32)",0.123
+n16,"block 16",2,~101K,splitKreduce_kernel,0.116
+n16,"block 16",2,~101K,moe_align_block_size_kernel,0.094
+n16,"block 16",2,~101K,act_and_mul_kernel,0.091
+n16,"block 16",2,~101K,_router_triton_kernel,0.085
+n16,"block 16",2,~101K,"cublas(8,8,22)",0.082
+n16,"block 16",2,~101K,PersistentVariableLengthMergeSta,0.08
+n16,"block 16",2,~101K,vectorized_elementwise_kernel,0.077
+n16,"block 16",2,~101K,_moe_sum_reduce_kernel,0.054
+n16,"block 16",2,~101K,fused_qkvzba_split_reshape_cat_1,0.053
+n16,"block 16",2,~101K,_layer_norm_fwd_1pass_kernel,0.052
+n16,"block 16",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.049
+n16,"block 16",2,~101K,count_and_sort_expert_tokens_ker,0.048
+n16,"block 16",2,~101K,"cublas(8,2,11)",0.045
+n16,"block 16",3,~165K,_step_total,11.97
+n16,"block 16",3,~165K,_gaps,0.415
+n16,"block 16",3,~165K,fused_moe_kernel,4.58
+n16,"block 16",3,~165K,BatchPrefillWithPagedKVCacheKern,2.337
+n16,"block 16",3,~165K,"cublas(8,485,1)",0.684
+n16,"block 16",3,~165K,s5_ba_kernel,0.423
+n16,"block 16",3,~165K,"cutlass_gemm(1,32,1)",0.337
+n16,"block 16",3,~165K,"cutlass_gemm(1,192,1)",0.247
+n16,"block 16",3,~165K,bole_solve_kernel,0.231
+n16,"block 16",3,~165K,per_token_group_quant_flat_kerne,0.229
+n16,"block 16",3,~165K,"cublas(8,96,1)",0.227
+n16,"block 16",3,~165K,kernel_cutlass_kernel_flashinf_1,0.203
+n16,"block 16",3,~165K,_causal_conv1d_update_kernel,0.164
+n16,"block 16",3,~165K,bole_factor_kernel,0.153
+n16,"block 16",3,~165K,"cutlass_gemm(1,144,1)",0.151
+n16,"block 16",3,~165K,"cublas(8,188,1)",0.145
+n16,"block 16",3,~165K,"cublas(8,48,1)",0.129
+n16,"block 16",3,~165K,"cublas(8,8,32)",0.123
+n16,"block 16",3,~165K,splitKreduce_kernel,0.113
+n16,"block 16",3,~165K,moe_align_block_size_kernel,0.092
+n16,"block 16",3,~165K,act_and_mul_kernel,0.088
+n16,"block 16",3,~165K,_router_triton_kernel,0.084
+n16,"block 16",3,~165K,"cublas(8,8,22)",0.082
+n16,"block 16",3,~165K,PersistentVariableLengthMergeSta,0.08
+n16,"block 16",3,~165K,vectorized_elementwise_kernel,0.074
+n16,"block 16",3,~165K,_moe_sum_reduce_kernel,0.051
+n16,"block 16",3,~165K,fused_qkvzba_split_reshape_cat_1,0.051
+n16,"block 16",3,~165K,_layer_norm_fwd_1pass_kernel,0.05
+n16,"block 16",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n16,"block 16",3,~165K,count_and_sort_expert_tokens_ker,0.045
+n16,"block 16",3,~165K,"cublas(8,2,11)",0.044
+n16v,"block 16 + AVL",1,~18K,_step_total,11.01
+n16v,"block 16 + AVL",1,~18K,_gaps,0.443
+n16v,"block 16 + AVL",1,~18K,fused_moe_kernel,5.156
+n16v,"block 16 + AVL",1,~18K,"cublas(8,485,1)",0.684
+n16v,"block 16 + AVL",1,~18K,BatchPrefillWithPagedKVCacheKern,0.565
+n16v,"block 16 + AVL",1,~18K,s5_ba_kernel,0.419
+n16v,"block 16 + AVL",1,~18K,"cutlass_gemm(1,32,1)",0.346
+n16v,"block 16 + AVL",1,~18K,"cutlass_gemm(1,192,1)",0.25
+n16v,"block 16 + AVL",1,~18K,per_token_group_quant_flat_kerne,0.239
+n16v,"block 16 + AVL",1,~18K,bole_solve_kernel,0.239
+n16v,"block 16 + AVL",1,~18K,"cublas(8,96,1)",0.228
+n16v,"block 16 + AVL",1,~18K,kernel_cutlass_kernel_flashinf_1,0.213
+n16v,"block 16 + AVL",1,~18K,_causal_conv1d_update_kernel,0.173
+n16v,"block 16 + AVL",1,~18K,bole_factor_kernel,0.16
+n16v,"block 16 + AVL",1,~18K,"cutlass_gemm(1,144,1)",0.15
+n16v,"block 16 + AVL",1,~18K,"cublas(8,188,1)",0.145
+n16v,"block 16 + AVL",1,~18K,"cublas(8,48,1)",0.131
+n16v,"block 16 + AVL",1,~18K,"cublas(8,8,32)",0.124
+n16v,"block 16 + AVL",1,~18K,splitKreduce_kernel,0.119
+n16v,"block 16 + AVL",1,~18K,act_and_mul_kernel,0.101
+n16v,"block 16 + AVL",1,~18K,moe_align_block_size_kernel,0.098
+n16v,"block 16 + AVL",1,~18K,_router_triton_kernel,0.089
+n16v,"block 16 + AVL",1,~18K,elementwise_kernel,0.085
+n16v,"block 16 + AVL",1,~18K,vectorized_elementwise_kernel,0.085
+n16v,"block 16 + AVL",1,~18K,PersistentVariableLengthMergeSta,0.084
+n16v,"block 16 + AVL",1,~18K,"cublas(8,8,22)",0.082
+n16v,"block 16 + AVL",1,~18K,_moe_sum_reduce_kernel,0.055
+n16v,"block 16 + AVL",1,~18K,fused_qkvzba_split_reshape_cat_1,0.054
+n16v,"block 16 + AVL",1,~18K,_layer_norm_fwd_1pass_kernel,0.053
+n16v,"block 16 + AVL",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.051
+n16v,"block 16 + AVL",1,~18K,count_and_sort_expert_tokens_ker,0.047
+n16v,"block 16 + AVL",2,~101K,_step_total,9.91
+n16v,"block 16 + AVL",2,~101K,_gaps,0.434
+n16v,"block 16 + AVL",2,~101K,fused_moe_kernel,3.225
+n16v,"block 16 + AVL",2,~101K,BatchPrefillWithPagedKVCacheKern,1.526
+n16v,"block 16 + AVL",2,~101K,"cublas(8,485,1)",0.688
+n16v,"block 16 + AVL",2,~101K,s5_ba_kernel,0.427
+n16v,"block 16 + AVL",2,~101K,"cutlass_gemm(1,32,1)",0.341
+n16v,"block 16 + AVL",2,~101K,"cutlass_gemm(1,192,1)",0.249
+n16v,"block 16 + AVL",2,~101K,per_token_group_quant_flat_kerne,0.232
+n16v,"block 16 + AVL",2,~101K,bole_solve_kernel,0.23
+n16v,"block 16 + AVL",2,~101K,"cublas(8,96,1)",0.226
+n16v,"block 16 + AVL",2,~101K,kernel_cutlass_kernel_flashinf_1,0.202
+n16v,"block 16 + AVL",2,~101K,_causal_conv1d_update_kernel,0.164
+n16v,"block 16 + AVL",2,~101K,bole_factor_kernel,0.151
+n16v,"block 16 + AVL",2,~101K,"cutlass_gemm(1,144,1)",0.151
+n16v,"block 16 + AVL",2,~101K,"cublas(8,188,1)",0.145
+n16v,"block 16 + AVL",2,~101K,"cublas(8,48,1)",0.129
+n16v,"block 16 + AVL",2,~101K,"cublas(8,8,32)",0.123
+n16v,"block 16 + AVL",2,~101K,splitKreduce_kernel,0.111
+n16v,"block 16 + AVL",2,~101K,moe_align_block_size_kernel,0.092
+n16v,"block 16 + AVL",2,~101K,act_and_mul_kernel,0.091
+n16v,"block 16 + AVL",2,~101K,_router_triton_kernel,0.084
+n16v,"block 16 + AVL",2,~101K,"cublas(8,8,22)",0.082
+n16v,"block 16 + AVL",2,~101K,vectorized_elementwise_kernel,0.08
+n16v,"block 16 + AVL",2,~101K,elementwise_kernel,0.079
+n16v,"block 16 + AVL",2,~101K,PersistentVariableLengthMergeSta,0.079
+n16v,"block 16 + AVL",2,~101K,_moe_sum_reduce_kernel,0.052
+n16v,"block 16 + AVL",2,~101K,_layer_norm_fwd_1pass_kernel,0.05
+n16v,"block 16 + AVL",2,~101K,fused_qkvzba_split_reshape_cat_1,0.05
+n16v,"block 16 + AVL",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.045
+n16v,"block 16 + AVL",2,~101K,"cublas(8,2,11)",0.045
+n16v,"block 16 + AVL",3,~165K,_step_total,12.02
+n16v,"block 16 + AVL",3,~165K,_gaps,0.435
+n16v,"block 16 + AVL",3,~165K,fused_moe_kernel,4.526
+n16v,"block 16 + AVL",3,~165K,BatchPrefillWithPagedKVCacheKern,2.342
+n16v,"block 16 + AVL",3,~165K,"cublas(8,485,1)",0.684
+n16v,"block 16 + AVL",3,~165K,s5_ba_kernel,0.419
+n16v,"block 16 + AVL",3,~165K,"cutlass_gemm(1,32,1)",0.337
+n16v,"block 16 + AVL",3,~165K,"cutlass_gemm(1,192,1)",0.246
+n16v,"block 16 + AVL",3,~165K,per_token_group_quant_flat_kerne,0.23
+n16v,"block 16 + AVL",3,~165K,bole_solve_kernel,0.23
+n16v,"block 16 + AVL",3,~165K,"cublas(8,96,1)",0.227
+n16v,"block 16 + AVL",3,~165K,kernel_cutlass_kernel_flashinf_1,0.203
+n16v,"block 16 + AVL",3,~165K,_causal_conv1d_update_kernel,0.164
+n16v,"block 16 + AVL",3,~165K,bole_factor_kernel,0.152
+n16v,"block 16 + AVL",3,~165K,"cutlass_gemm(1,144,1)",0.149
+n16v,"block 16 + AVL",3,~165K,"cublas(8,188,1)",0.145
+n16v,"block 16 + AVL",3,~165K,"cublas(8,48,1)",0.129
+n16v,"block 16 + AVL",3,~165K,"cublas(8,8,32)",0.123
+n16v,"block 16 + AVL",3,~165K,splitKreduce_kernel,0.113
+n16v,"block 16 + AVL",3,~165K,moe_align_block_size_kernel,0.093
+n16v,"block 16 + AVL",3,~165K,act_and_mul_kernel,0.091
+n16v,"block 16 + AVL",3,~165K,_router_triton_kernel,0.084
+n16v,"block 16 + AVL",3,~165K,"cublas(8,8,22)",0.082
+n16v,"block 16 + AVL",3,~165K,elementwise_kernel,0.081
+n16v,"block 16 + AVL",3,~165K,PersistentVariableLengthMergeSta,0.08
+n16v,"block 16 + AVL",3,~165K,vectorized_elementwise_kernel,0.079
+n16v,"block 16 + AVL",3,~165K,_moe_sum_reduce_kernel,0.051
+n16v,"block 16 + AVL",3,~165K,fused_qkvzba_split_reshape_cat_1,0.05
+n16v,"block 16 + AVL",3,~165K,_layer_norm_fwd_1pass_kernel,0.05
+n16v,"block 16 + AVL",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.048
+n16v,"block 16 + AVL",3,~165K,"cublas(8,2,11)",0.045
+n8,"block 8 BEST3",1,~18K,_step_total,8.56
+n8,"block 8 BEST3",1,~18K,_gaps,0.393
+n8,"block 8 BEST3",1,~18K,fused_moe_kernel,3.096
+n8,"block 8 BEST3",1,~18K,"cublas(8,485,1)",0.679
+n8,"block 8 BEST3",1,~18K,BatchPrefillWithPagedKVCacheKern,0.47
+n8,"block 8 BEST3",1,~18K,s5_ba_kernel,0.41
+n8,"block 8 BEST3",1,~18K,"cutlass_gemm(1,32,1)",0.347
+n8,"block 8 BEST3",1,~18K,"cutlass_gemm(1,192,1)",0.279
+n8,"block 8 BEST3",1,~18K,per_token_group_quant_flat_kerne,0.236
+n8,"block 8 BEST3",1,~18K,"cublas(8,96,1)",0.223
+n8,"block 8 BEST3",1,~18K,kernel_cutlass_kernel_flashinf_1,0.209
+n8,"block 8 BEST3",1,~18K,bole_solve_kernel,0.199
+n8,"block 8 BEST3",1,~18K,bole_factor_kernel,0.162
+n8,"block 8 BEST3",1,~18K,_moe_align_small_numel_kernel,0.157
+n8,"block 8 BEST3",1,~18K,"cutlass_gemm(1,144,1)",0.152
+n8,"block 8 BEST3",1,~18K,"cublas(8,188,1)",0.141
+n8,"block 8 BEST3",1,~18K,"cublas(8,48,1)",0.127
+n8,"block 8 BEST3",1,~18K,"cublas(8,8,32)",0.124
+n8,"block 8 BEST3",1,~18K,splitKreduce_kernel,0.106
+n8,"block 8 BEST3",1,~18K,_causal_conv1d_update_kernel,0.104
+n8,"block 8 BEST3",1,~18K,act_and_mul_kernel,0.094
+n8,"block 8 BEST3",1,~18K,PersistentVariableLengthMergeSta,0.088
+n8,"block 8 BEST3",1,~18K,_router_triton_kernel,0.085
+n8,"block 8 BEST3",1,~18K,"cublas(8,8,22)",0.08
+n8,"block 8 BEST3",1,~18K,vectorized_elementwise_kernel,0.076
+n8,"block 8 BEST3",1,~18K,_moe_sum_reduce_kernel,0.055
+n8,"block 8 BEST3",1,~18K,fused_qkvzba_split_reshape_cat_1,0.051
+n8,"block 8 BEST3",1,~18K,_layer_norm_fwd_1pass_kernel,0.049
+n8,"block 8 BEST3",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.046
+n8,"block 8 BEST3",1,~18K,"cublas(8,2,11)",0.045
+n8,"block 8 BEST3",1,~18K,elementwise_kernel,0.033
+n8,"block 8 BEST3",2,~101K,_step_total,9.18
+n8,"block 8 BEST3",2,~101K,_gaps,0.398
+n8,"block 8 BEST3",2,~101K,fused_moe_kernel,3.174
+n8,"block 8 BEST3",2,~101K,BatchPrefillWithPagedKVCacheKern,1.036
+n8,"block 8 BEST3",2,~101K,"cublas(8,485,1)",0.679
+n8,"block 8 BEST3",2,~101K,s5_ba_kernel,0.408
+n8,"block 8 BEST3",2,~101K,"cutlass_gemm(1,32,1)",0.344
+n8,"block 8 BEST3",2,~101K,"cutlass_gemm(1,192,1)",0.281
+n8,"block 8 BEST3",2,~101K,per_token_group_quant_flat_kerne,0.232
+n8,"block 8 BEST3",2,~101K,"cublas(8,96,1)",0.222
+n8,"block 8 BEST3",2,~101K,kernel_cutlass_kernel_flashinf_1,0.206
+n8,"block 8 BEST3",2,~101K,bole_solve_kernel,0.195
+n8,"block 8 BEST3",2,~101K,bole_factor_kernel,0.158
+n8,"block 8 BEST3",2,~101K,_moe_align_small_numel_kernel,0.154
+n8,"block 8 BEST3",2,~101K,"cutlass_gemm(1,144,1)",0.152
+n8,"block 8 BEST3",2,~101K,"cublas(8,188,1)",0.14
+n8,"block 8 BEST3",2,~101K,"cublas(8,48,1)",0.124
+n8,"block 8 BEST3",2,~101K,"cublas(8,8,32)",0.123
+n8,"block 8 BEST3",2,~101K,splitKreduce_kernel,0.104
+n8,"block 8 BEST3",2,~101K,_causal_conv1d_update_kernel,0.103
+n8,"block 8 BEST3",2,~101K,PersistentVariableLengthMergeSta,0.099
+n8,"block 8 BEST3",2,~101K,act_and_mul_kernel,0.093
+n8,"block 8 BEST3",2,~101K,_router_triton_kernel,0.083
+n8,"block 8 BEST3",2,~101K,"cublas(8,8,22)",0.081
+n8,"block 8 BEST3",2,~101K,vectorized_elementwise_kernel,0.074
+n8,"block 8 BEST3",2,~101K,_moe_sum_reduce_kernel,0.052
+n8,"block 8 BEST3",2,~101K,fused_qkvzba_split_reshape_cat_1,0.05
+n8,"block 8 BEST3",2,~101K,_layer_norm_fwd_1pass_kernel,0.049
+n8,"block 8 BEST3",2,~101K,"cublas(8,2,11)",0.045
+n8,"block 8 BEST3",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.045
+n8,"block 8 BEST3",2,~101K,elementwise_kernel,0.032
+n8,"block 8 BEST3",3,~165K,_step_total,9.77
+n8,"block 8 BEST3",3,~165K,_gaps,0.388
+n8,"block 8 BEST3",3,~165K,fused_moe_kernel,3.413
+n8,"block 8 BEST3",3,~165K,BatchPrefillWithPagedKVCacheKern,1.46
+n8,"block 8 BEST3",3,~165K,"cublas(8,485,1)",0.678
+n8,"block 8 BEST3",3,~165K,s5_ba_kernel,0.409
+n8,"block 8 BEST3",3,~165K,"cutlass_gemm(1,32,1)",0.338
+n8,"block 8 BEST3",3,~165K,"cutlass_gemm(1,192,1)",0.271
+n8,"block 8 BEST3",3,~165K,per_token_group_quant_flat_kerne,0.226
+n8,"block 8 BEST3",3,~165K,"cublas(8,96,1)",0.222
+n8,"block 8 BEST3",3,~165K,kernel_cutlass_kernel_flashinf_1,0.2
+n8,"block 8 BEST3",3,~165K,bole_solve_kernel,0.192
+n8,"block 8 BEST3",3,~165K,bole_factor_kernel,0.155
+n8,"block 8 BEST3",3,~165K,"cutlass_gemm(1,144,1)",0.151
+n8,"block 8 BEST3",3,~165K,_moe_align_small_numel_kernel,0.151
+n8,"block 8 BEST3",3,~165K,"cublas(8,188,1)",0.14
+n8,"block 8 BEST3",3,~165K,"cublas(8,48,1)",0.125
+n8,"block 8 BEST3",3,~165K,"cublas(8,8,32)",0.123
+n8,"block 8 BEST3",3,~165K,splitKreduce_kernel,0.102
+n8,"block 8 BEST3",3,~165K,_causal_conv1d_update_kernel,0.1
+n8,"block 8 BEST3",3,~165K,PersistentVariableLengthMergeSta,0.097
+n8,"block 8 BEST3",3,~165K,act_and_mul_kernel,0.091
+n8,"block 8 BEST3",3,~165K,_router_triton_kernel,0.081
+n8,"block 8 BEST3",3,~165K,"cublas(8,8,22)",0.08
+n8,"block 8 BEST3",3,~165K,vectorized_elementwise_kernel,0.073
+n8,"block 8 BEST3",3,~165K,_moe_sum_reduce_kernel,0.051
+n8,"block 8 BEST3",3,~165K,fused_qkvzba_split_reshape_cat_1,0.048
+n8,"block 8 BEST3",3,~165K,_layer_norm_fwd_1pass_kernel,0.047
+n8,"block 8 BEST3",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.044
+n8,"block 8 BEST3",3,~165K,"cublas(8,2,11)",0.044
+n8,"block 8 BEST3",3,~165K,elementwise_kernel,0.031
+n16l,"block 16 + AVL + L-skip",1,~18K,_step_total,8.91
+n16l,"block 16 + AVL + L-skip",1,~18K,_gaps,0.443
+n16l,"block 16 + AVL + L-skip",1,~18K,fused_moe_kernel,3.141
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,485,1)",0.688
+n16l,"block 16 + AVL + L-skip",1,~18K,BatchPrefillWithPagedKVCacheKern,0.524
+n16l,"block 16 + AVL + L-skip",1,~18K,s5_ba_kernel,0.438
+n16l,"block 16 + AVL + L-skip",1,~18K,"cutlass_gemm(1,32,1)",0.347
+n16l,"block 16 + AVL + L-skip",1,~18K,"cutlass_gemm(1,192,1)",0.241
+n16l,"block 16 + AVL + L-skip",1,~18K,per_token_group_quant_flat_kerne,0.237
+n16l,"block 16 + AVL + L-skip",1,~18K,bole_solve_kernel,0.236
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,96,1)",0.228
+n16l,"block 16 + AVL + L-skip",1,~18K,kernel_cutlass_kernel_flashinf_1,0.204
+n16l,"block 16 + AVL + L-skip",1,~18K,_causal_conv1d_update_kernel,0.17
+n16l,"block 16 + AVL + L-skip",1,~18K,bole_factor_kernel,0.156
+n16l,"block 16 + AVL + L-skip",1,~18K,"cutlass_gemm(1,144,1)",0.151
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,188,1)",0.145
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,48,1)",0.13
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,8,32)",0.124
+n16l,"block 16 + AVL + L-skip",1,~18K,splitKreduce_kernel,0.115
+n16l,"block 16 + AVL + L-skip",1,~18K,act_and_mul_kernel,0.094
+n16l,"block 16 + AVL + L-skip",1,~18K,moe_align_block_size_kernel,0.094
+n16l,"block 16 + AVL + L-skip",1,~18K,_router_triton_kernel,0.087
+n16l,"block 16 + AVL + L-skip",1,~18K,PersistentVariableLengthMergeSta,0.085
+n16l,"block 16 + AVL + L-skip",1,~18K,vectorized_elementwise_kernel,0.084
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,8,22)",0.081
+n16l,"block 16 + AVL + L-skip",1,~18K,elementwise_kernel,0.08
+n16l,"block 16 + AVL + L-skip",1,~18K,_moe_sum_reduce_kernel,0.054
+n16l,"block 16 + AVL + L-skip",1,~18K,_layer_norm_fwd_1pass_kernel,0.053
+n16l,"block 16 + AVL + L-skip",1,~18K,fused_qkvzba_split_reshape_cat_1,0.052
+n16l,"block 16 + AVL + L-skip",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n16l,"block 16 + AVL + L-skip",1,~18K,"cublas(8,2,11)",0.045
+n16l,"block 16 + AVL + L-skip",2,~101K,_step_total,10.59
+n16l,"block 16 + AVL + L-skip",2,~101K,_gaps,0.453
+n16l,"block 16 + AVL + L-skip",2,~101K,fused_moe_kernel,4.019
+n16l,"block 16 + AVL + L-skip",2,~101K,BatchPrefillWithPagedKVCacheKern,1.36
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,485,1)",0.686
+n16l,"block 16 + AVL + L-skip",2,~101K,s5_ba_kernel,0.433
+n16l,"block 16 + AVL + L-skip",2,~101K,"cutlass_gemm(1,32,1)",0.341
+n16l,"block 16 + AVL + L-skip",2,~101K,"cutlass_gemm(1,192,1)",0.239
+n16l,"block 16 + AVL + L-skip",2,~101K,per_token_group_quant_flat_kerne,0.233
+n16l,"block 16 + AVL + L-skip",2,~101K,bole_solve_kernel,0.232
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,96,1)",0.227
+n16l,"block 16 + AVL + L-skip",2,~101K,kernel_cutlass_kernel_flashinf_1,0.201
+n16l,"block 16 + AVL + L-skip",2,~101K,_causal_conv1d_update_kernel,0.168
+n16l,"block 16 + AVL + L-skip",2,~101K,bole_factor_kernel,0.153
+n16l,"block 16 + AVL + L-skip",2,~101K,"cutlass_gemm(1,144,1)",0.151
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,188,1)",0.145
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,48,1)",0.129
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,8,32)",0.123
+n16l,"block 16 + AVL + L-skip",2,~101K,splitKreduce_kernel,0.114
+n16l,"block 16 + AVL + L-skip",2,~101K,moe_align_block_size_kernel,0.093
+n16l,"block 16 + AVL + L-skip",2,~101K,act_and_mul_kernel,0.093
+n16l,"block 16 + AVL + L-skip",2,~101K,PersistentVariableLengthMergeSta,0.087
+n16l,"block 16 + AVL + L-skip",2,~101K,_router_triton_kernel,0.085
+n16l,"block 16 + AVL + L-skip",2,~101K,elementwise_kernel,0.082
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,8,22)",0.082
+n16l,"block 16 + AVL + L-skip",2,~101K,vectorized_elementwise_kernel,0.08
+n16l,"block 16 + AVL + L-skip",2,~101K,_moe_sum_reduce_kernel,0.052
+n16l,"block 16 + AVL + L-skip",2,~101K,_layer_norm_fwd_1pass_kernel,0.052
+n16l,"block 16 + AVL + L-skip",2,~101K,fused_qkvzba_split_reshape_cat_1,0.052
+n16l,"block 16 + AVL + L-skip",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n16l,"block 16 + AVL + L-skip",2,~101K,"cublas(8,2,11)",0.045
+n16l,"block 16 + AVL + L-skip",3,~165K,_step_total,11.57
+n16l,"block 16 + AVL + L-skip",3,~165K,_gaps,0.438
+n16l,"block 16 + AVL + L-skip",3,~165K,fused_moe_kernel,4.384
+n16l,"block 16 + AVL + L-skip",3,~165K,BatchPrefillWithPagedKVCacheKern,2.036
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,485,1)",0.685
+n16l,"block 16 + AVL + L-skip",3,~165K,s5_ba_kernel,0.432
+n16l,"block 16 + AVL + L-skip",3,~165K,"cutlass_gemm(1,32,1)",0.339
+n16l,"block 16 + AVL + L-skip",3,~165K,"cutlass_gemm(1,192,1)",0.231
+n16l,"block 16 + AVL + L-skip",3,~165K,bole_solve_kernel,0.23
+n16l,"block 16 + AVL + L-skip",3,~165K,per_token_group_quant_flat_kerne,0.229
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,96,1)",0.227
+n16l,"block 16 + AVL + L-skip",3,~165K,kernel_cutlass_kernel_flashinf_1,0.199
+n16l,"block 16 + AVL + L-skip",3,~165K,_causal_conv1d_update_kernel,0.162
+n16l,"block 16 + AVL + L-skip",3,~165K,bole_factor_kernel,0.151
+n16l,"block 16 + AVL + L-skip",3,~165K,"cutlass_gemm(1,144,1)",0.149
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,188,1)",0.145
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,48,1)",0.128
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,8,32)",0.123
+n16l,"block 16 + AVL + L-skip",3,~165K,splitKreduce_kernel,0.112
+n16l,"block 16 + AVL + L-skip",3,~165K,moe_align_block_size_kernel,0.092
+n16l,"block 16 + AVL + L-skip",3,~165K,act_and_mul_kernel,0.09
+n16l,"block 16 + AVL + L-skip",3,~165K,PersistentVariableLengthMergeSta,0.087
+n16l,"block 16 + AVL + L-skip",3,~165K,_router_triton_kernel,0.084
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,8,22)",0.082
+n16l,"block 16 + AVL + L-skip",3,~165K,elementwise_kernel,0.08
+n16l,"block 16 + AVL + L-skip",3,~165K,vectorized_elementwise_kernel,0.079
+n16l,"block 16 + AVL + L-skip",3,~165K,_moe_sum_reduce_kernel,0.051
+n16l,"block 16 + AVL + L-skip",3,~165K,_layer_norm_fwd_1pass_kernel,0.05
+n16l,"block 16 + AVL + L-skip",3,~165K,fused_qkvzba_split_reshape_cat_1,0.05
+n16l,"block 16 + AVL + L-skip",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n16l,"block 16 + AVL + L-skip",3,~165K,"cublas(8,2,11)",0.044
+n24l,"block 24 + AVL + L-skip",1,~18K,_step_total,10.36
+n24l,"block 24 + AVL + L-skip",1,~18K,_gaps,0.444
+n24l,"block 24 + AVL + L-skip",1,~18K,fused_moe_kernel,3.621
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,122,1)",0.7
+n24l,"block 24 + AVL + L-skip",1,~18K,bole_solve_kernel,0.627
+n24l,"block 24 + AVL + L-skip",1,~18K,BatchPrefillWithPagedKVCacheKern,0.562
+n24l,"block 24 + AVL + L-skip",1,~18K,splitKreduce_kernel,0.483
+n24l,"block 24 + AVL + L-skip",1,~18K,"cutlass_gemm(1,16,1)",0.478
+n24l,"block 24 + AVL + L-skip",1,~18K,_causal_conv1d_update_kernel,0.304
+n24l,"block 24 + AVL + L-skip",1,~18K,per_token_group_quant_flat_kerne,0.244
+n24l,"block 24 + AVL + L-skip",1,~18K,bole_factor_kernel,0.238
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,48,1)",0.23
+n24l,"block 24 + AVL + L-skip",1,~18K,"cutlass_gemm(1,96,1)",0.228
+n24l,"block 24 + AVL + L-skip",1,~18K,kernel_cutlass_kernel_flashinf_1,0.206
+n24l,"block 24 + AVL + L-skip",1,~18K,elementwise_kernel,0.183
+n24l,"block 24 + AVL + L-skip",1,~18K,"cutlass_gemm(1,72,1)",0.152
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,24,1)",0.142
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,47,1)",0.142
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,8,11)",0.12
+n24l,"block 24 + AVL + L-skip",1,~18K,vectorized_elementwise_kernel,0.107
+n24l,"block 24 + AVL + L-skip",1,~18K,act_and_mul_kernel,0.1
+n24l,"block 24 + AVL + L-skip",1,~18K,moe_align_block_size_kernel,0.096
+n24l,"block 24 + AVL + L-skip",1,~18K,_router_triton_kernel,0.088
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(8,2,11)",0.086
+n24l,"block 24 + AVL + L-skip",1,~18K,PersistentVariableLengthMergeSta,0.085
+n24l,"block 24 + AVL + L-skip",1,~18K,_moe_sum_reduce_kernel,0.059
+n24l,"block 24 + AVL + L-skip",1,~18K,_layer_norm_fwd_1pass_kernel,0.054
+n24l,"block 24 + AVL + L-skip",1,~18K,fused_qkvzba_split_reshape_cat_1,0.052
+n24l,"block 24 + AVL + L-skip",1,~18K,count_and_sort_expert_tokens_ker,0.051
+n24l,"block 24 + AVL + L-skip",1,~18K,"cublas(1,1,32)",0.049
+n24l,"block 24 + AVL + L-skip",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.049
+n24l,"block 24 + AVL + L-skip",2,~101K,_step_total,9.06
+n24l,"block 24 + AVL + L-skip",2,~101K,_gaps,0.477
+n24l,"block 24 + AVL + L-skip",2,~101K,fused_moe_kernel,1.825
+n24l,"block 24 + AVL + L-skip",2,~101K,BatchPrefillWithPagedKVCacheKern,1.082
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,122,1)",0.705
+n24l,"block 24 + AVL + L-skip",2,~101K,bole_solve_kernel,0.61
+n24l,"block 24 + AVL + L-skip",2,~101K,splitKreduce_kernel,0.474
+n24l,"block 24 + AVL + L-skip",2,~101K,"cutlass_gemm(1,16,1)",0.466
+n24l,"block 24 + AVL + L-skip",2,~101K,_causal_conv1d_update_kernel,0.302
+n24l,"block 24 + AVL + L-skip",2,~101K,per_token_group_quant_flat_kerne,0.239
+n24l,"block 24 + AVL + L-skip",2,~101K,"cutlass_gemm(1,96,1)",0.235
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,48,1)",0.231
+n24l,"block 24 + AVL + L-skip",2,~101K,bole_factor_kernel,0.23
+n24l,"block 24 + AVL + L-skip",2,~101K,kernel_cutlass_kernel_flashinf_1,0.204
+n24l,"block 24 + AVL + L-skip",2,~101K,elementwise_kernel,0.177
+n24l,"block 24 + AVL + L-skip",2,~101K,"cutlass_gemm(1,72,1)",0.15
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,24,1)",0.145
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,47,1)",0.142
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,8,11)",0.119
+n24l,"block 24 + AVL + L-skip",2,~101K,PersistentVariableLengthMergeSta,0.107
+n24l,"block 24 + AVL + L-skip",2,~101K,vectorized_elementwise_kernel,0.105
+n24l,"block 24 + AVL + L-skip",2,~101K,act_and_mul_kernel,0.099
+n24l,"block 24 + AVL + L-skip",2,~101K,moe_align_block_size_kernel,0.092
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(8,2,11)",0.086
+n24l,"block 24 + AVL + L-skip",2,~101K,_router_triton_kernel,0.086
+n24l,"block 24 + AVL + L-skip",2,~101K,_moe_sum_reduce_kernel,0.063
+n24l,"block 24 + AVL + L-skip",2,~101K,_layer_norm_fwd_1pass_kernel,0.054
+n24l,"block 24 + AVL + L-skip",2,~101K,fused_qkvzba_split_reshape_cat_1,0.049
+n24l,"block 24 + AVL + L-skip",2,~101K,"cublas(1,1,32)",0.047
+n24l,"block 24 + AVL + L-skip",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.045
+n24l,"block 24 + AVL + L-skip",2,~101K,count_and_sort_expert_tokens_ker,0.044
+n24l,"block 24 + AVL + L-skip",3,~165K,_step_total,11.88
+n24l,"block 24 + AVL + L-skip",3,~165K,_gaps,0.422
+n24l,"block 24 + AVL + L-skip",3,~165K,fused_moe_kernel,3.6
+n24l,"block 24 + AVL + L-skip",3,~165K,BatchPrefillWithPagedKVCacheKern,2.268
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,122,1)",0.699
+n24l,"block 24 + AVL + L-skip",3,~165K,bole_solve_kernel,0.602
+n24l,"block 24 + AVL + L-skip",3,~165K,splitKreduce_kernel,0.485
+n24l,"block 24 + AVL + L-skip",3,~165K,"cutlass_gemm(1,16,1)",0.459
+n24l,"block 24 + AVL + L-skip",3,~165K,_causal_conv1d_update_kernel,0.288
+n24l,"block 24 + AVL + L-skip",3,~165K,per_token_group_quant_flat_kerne,0.235
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,48,1)",0.23
+n24l,"block 24 + AVL + L-skip",3,~165K,bole_factor_kernel,0.228
+n24l,"block 24 + AVL + L-skip",3,~165K,"cutlass_gemm(1,96,1)",0.219
+n24l,"block 24 + AVL + L-skip",3,~165K,kernel_cutlass_kernel_flashinf_1,0.2
+n24l,"block 24 + AVL + L-skip",3,~165K,elementwise_kernel,0.178
+n24l,"block 24 + AVL + L-skip",3,~165K,"cutlass_gemm(1,72,1)",0.151
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,24,1)",0.145
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,47,1)",0.142
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,8,11)",0.119
+n24l,"block 24 + AVL + L-skip",3,~165K,vectorized_elementwise_kernel,0.104
+n24l,"block 24 + AVL + L-skip",3,~165K,act_and_mul_kernel,0.096
+n24l,"block 24 + AVL + L-skip",3,~165K,moe_align_block_size_kernel,0.094
+n24l,"block 24 + AVL + L-skip",3,~165K,PersistentVariableLengthMergeSta,0.09
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(8,2,11)",0.086
+n24l,"block 24 + AVL + L-skip",3,~165K,_router_triton_kernel,0.084
+n24l,"block 24 + AVL + L-skip",3,~165K,_moe_sum_reduce_kernel,0.055
+n24l,"block 24 + AVL + L-skip",3,~165K,_layer_norm_fwd_1pass_kernel,0.052
+n24l,"block 24 + AVL + L-skip",3,~165K,count_and_sort_expert_tokens_ker,0.05
+n24l,"block 24 + AVL + L-skip",3,~165K,fused_qkvzba_split_reshape_cat_1,0.049
+n24l,"block 24 + AVL + L-skip",3,~165K,"cublas(1,1,32)",0.048
+n24l,"block 24 + AVL + L-skip",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_step_total,10.05
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_gaps,0.93
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,fused_moe_kernel,3.547
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,122,1)",0.701
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,BatchPrefillWithPagedKVCacheKern,0.561
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,bole_solve_kernel,0.442
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cutlass_gemm(1,32,1)",0.348
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_causal_conv1d_update_kernel,0.309
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,splitKreduce_kernel,0.262
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,per_token_group_quant_flat_kerne,0.246
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,bole_factor_kernel,0.238
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,48,1)",0.233
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,kernel_cutlass_kernel_flashinf_1,0.207
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,elementwise_kernel,0.184
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cutlass_gemm(1,144,1)",0.152
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,47,1)",0.142
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,24,1)",0.14
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,8,11)",0.119
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,vectorized_elementwise_kernel,0.105
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,act_and_mul_kernel,0.101
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,moe_align_block_size_kernel,0.095
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_router_triton_kernel,0.088
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,PersistentVariableLengthMergeSta,0.087
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,2,11)",0.087
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_moe_sum_reduce_kernel,0.06
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_layer_norm_fwd_1pass_kernel,0.055
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,fused_qkvzba_split_reshape_cat_1,0.053
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(1,1,32)",0.049
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,_fused_gate_sigmoid_mul_add_ke_1,0.049
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,count_and_sort_expert_tokens_ker,0.048
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",1,~18K,"cublas(8,2,32)",0.044
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_step_total,8.73
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_gaps,0.892
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,fused_moe_kernel,1.839
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,BatchPrefillWithPagedKVCacheKern,1.077
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,122,1)",0.705
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,bole_solve_kernel,0.424
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cutlass_gemm(1,32,1)",0.341
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_causal_conv1d_update_kernel,0.299
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,splitKreduce_kernel,0.256
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,per_token_group_quant_flat_kerne,0.239
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,48,1)",0.233
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,bole_factor_kernel,0.228
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,kernel_cutlass_kernel_flashinf_1,0.202
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,elementwise_kernel,0.175
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cutlass_gemm(1,144,1)",0.15
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,24,1)",0.145
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,47,1)",0.142
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,8,11)",0.119
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,PersistentVariableLengthMergeSta,0.107
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,vectorized_elementwise_kernel,0.106
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,act_and_mul_kernel,0.097
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,moe_align_block_size_kernel,0.09
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,2,11)",0.086
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_router_triton_kernel,0.085
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_moe_sum_reduce_kernel,0.062
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_layer_norm_fwd_1pass_kernel,0.053
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,fused_qkvzba_split_reshape_cat_1,0.05
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(1,1,32)",0.047
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,_fused_gate_sigmoid_mul_add_ke_1,0.044
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,"cublas(8,2,32)",0.043
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",2,~101K,count_and_sort_expert_tokens_ker,0.042
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_step_total,11.75
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_gaps,0.882
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,fused_moe_kernel,3.707
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,BatchPrefillWithPagedKVCacheKern,2.293
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,122,1)",0.699
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,bole_solve_kernel,0.42
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cutlass_gemm(1,32,1)",0.338
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_causal_conv1d_update_kernel,0.29
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,splitKreduce_kernel,0.254
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,per_token_group_quant_flat_kerne,0.237
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,48,1)",0.232
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,bole_factor_kernel,0.228
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,kernel_cutlass_kernel_flashinf_1,0.201
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,elementwise_kernel,0.179
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cutlass_gemm(1,144,1)",0.152
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,24,1)",0.145
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,47,1)",0.142
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,8,11)",0.119
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,vectorized_elementwise_kernel,0.105
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,act_and_mul_kernel,0.096
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,moe_align_block_size_kernel,0.093
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,PersistentVariableLengthMergeSta,0.09
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,2,11)",0.086
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_router_triton_kernel,0.085
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_moe_sum_reduce_kernel,0.055
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_layer_norm_fwd_1pass_kernel,0.052
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,fused_qkvzba_split_reshape_cat_1,0.051
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,count_and_sort_expert_tokens_ker,0.049
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(1,1,32)",0.049
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,_fused_gate_sigmoid_mul_add_ke_1,0.047
+n24f,"block 24 + AVL + L-skip + s5 M<=24 + Bole BV8 (best)",3,~165K,"cublas(8,2,32)",0.043

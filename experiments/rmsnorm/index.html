@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="description" content="A FlashInfer CuTe fused-add RMSNorm experiment with up to 1.60x isolated speedup on an RTX 5070 Laptop GPU and validation inside Qwen3.5-2B." />
 <meta name="theme-color" content="#faf9f6" />
-<title>One Row per Block — FlashInfer RMSNorm · Ravi Kothari</title>
+<title>Up to 1.60x Faster Fused RMSNorm — One Row per Block · Ravi Kothari</title>
 <style>
 :root { --ink:#1e2b34; --muted:#60717a; --soft:#8b9699; --border:#e6e8e3; --teal:#126c60; --page:#faf9f6; --paper:#fff; --shade:#f5f7f4; }
 *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--page);color:var(--ink);font:16px/1.75 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
@@ -31,7 +31,7 @@ code{font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:#26584d;
 </style>
 </head>
 <body>
-<div class="wrap"><div class="topbar"><a class="brand" href="index.html">Ravi Kothari <span style="font-weight:400;color:#8b9699">/ Research Notes</span></a><a class="tag" href="https://github.com/ravi-kot/flashinfer-small-m-rmsnorm" target="_blank" rel="noopener noreferrer">View on GitHub</a></div>
+<div class="wrap"><div class="topbar"><a class="brand" href="../../index.html">Ravi Kothari <span style="font-weight:400;color:#8b9699">/ Research Notes</span></a><a class="tag" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/rmsnorm" target="_blank" rel="noopener noreferrer">View on GitHub</a></div>
 <header class="hero"><h1>One Row per Block:<br/>Up to 1.60x Faster Fused RMSNorm</h1>
 <div class="deck">A small CUDA block-mapping change, measured from one kernel to real Qwen3.5-2B decoding in SGLang.</div>
 <div class="meta"><strong>Ravi Kothari</strong> &nbsp;·&nbsp; October 21, 2026 &nbsp;·&nbsp; RTX 5070 Laptop (SM120) &nbsp;·&nbsp; BF16</div></header>

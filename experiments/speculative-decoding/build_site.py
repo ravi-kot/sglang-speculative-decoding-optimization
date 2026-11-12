@@ -17,7 +17,7 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 
 ROOT = Path(__file__).parent
-TITLE = "Optimizing Speculative Decoding on an RTX 5070"
+TITLE = "Up to 2.09x Faster Speculative Decoding on an 8 GB RTX 5070"
 SUBTITLE = "CUDA, quantized drafting, split-KV attention, and the limits of memory bandwidth."
 DESCRIPTION = ("How I made SGLang's NEXTN speculative decoding for Qwen3.5-2B up to 2.1x faster on an 8 GB laptop GPU "
                "without touching the BF16 target model.")
@@ -192,7 +192,7 @@ page = f"""<!doctype html>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="site"><a class="brand" href="index.html">Ravi Kothari</a><a class="repo-link" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization" target="_blank" rel="noopener noreferrer">GitHub repository</a></header>
+<header class="site"><a class="brand" href="../../index.html">Ravi Kothari</a><a class="repo-link" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/speculative-decoding" target="_blank" rel="noopener noreferrer">GitHub repository</a></header>
 <main>
 <article>
 <header class="post">

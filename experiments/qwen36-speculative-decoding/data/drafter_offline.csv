@@ -1,0 +1,25 @@
+drafter,recipe,block,best_step,chain_off,chain_on,seg_on_think,seg_on_tool,seg_off_tool,source
+"Run 1","block 16 from Coral, lr 1e-4, no teacher KL",16,1500,9.206,6.291,None,None,None,raw\s13\f2_train_drafter_b16.txt
+"Run 2","block 16, teacher KL 2.0 to Coral, lr 3e-5",16,1000,9.529,6.658,None,None,None,raw\s13\f2_train_drafter_b16_t.txt
+"Run 3a","Run 2 + hard post-rejection anchors",16,750,9.52,6.643,5.209,8.349,9.642,raw\s13\f2_train_drafter_r3a.txt
+"Run 3b","Run 2 + 120 Workato traces (4x)",16,788,9.492,6.662,5.213,8.386,9.601,raw\s13\f2_train_drafter_r3b.txt
+"Run 4","Run 2 + 140 SWE-rebench trajectories (4x)",16,800,9.563,6.65,5.205,8.371,9.688,raw\s14\f2_train_drafter_r4.txt
+"Run 5c","Run 4 + confidence-weighted loss 2.0",16,800,9.599,6.644,5.197,8.374,9.73,raw\s14\f2_train_drafter_r5c.txt
+"Run 6","block 24 from Run 2, teacher KL to Run 2 at block 16",24,1244,10.506,6.912,5.444,8.809,10.682,raw\s15\f2_train_drafter_b24.txt
+"Run 6b","Run 6 continued (hung, step 200)",24,200,10.429,6.908,5.476,8.746,10.575,raw\s16\f2_train_drafter_b24b.txt
+"Run 6c","Run 6 + 0.4 epoch, new data order",24,1244,10.489,6.922,5.471,8.799,10.628,raw\s17\f2_train_drafter_b24c.txt
+"Run 2 (eval only)","positions >= 16 untrained",20,0,10.064,6.797,5.334,8.608,10.206,raw\s15\b24e.txt
+"Run 2 (eval only)","positions >= 16 untrained",24,0,10.219,6.803,5.322,8.661,10.37,raw\s15\b24e.txt
+"Coral (eval only)","block sweep",10,0,7.481,5.936,None,None,None,raw\s13\abl.txt
+"Coral (eval only)","block sweep",12,0,8.111,6.259,None,None,None,raw\s13\abl.txt
+"Coral (eval only)","block sweep",14,0,8.436,6.398,None,None,None,raw\s13\abl.txt
+"Run 1 (eval only)","block sweep",8,0,6.441,5.193,None,None,None,raw\s13\abl.txt
+"Run 1 (eval only)","block sweep",10,0,7.344,5.658,None,None,None,raw\s13\abl.txt
+"Run 1 (eval only)","block sweep",12,0,8.043,5.95,None,None,None,raw\s13\abl.txt
+"Run 1 (eval only)","block sweep",14,0,8.664,6.161,None,None,None,raw\s13\abl.txt
+"Run 2 (eval only)","block sweep",8,0,6.572,5.388,None,None,None,raw\s13\abl.txt
+"Run 2 (eval only)","block sweep",14,0,8.962,6.502,None,None,None,raw\s13\abl.txt
+"Coral (eval only)","released drafter",8,0,6.58,5.41,None,None,None,"scoreboard16.md (f2_base)"
+"Coral (eval only)","released drafter",16,0,8.39,6.39,None,None,None,"scoreboard16.md (f2_base)"
+"Run 2 (eval only)","block sweep",10,0,7.54,5.9,None,None,None,"scoreboard16.md (f2_blocks_t)"
+"Run 2 (eval only)","block sweep",12,0,8.25,6.26,None,None,None,"scoreboard16.md (f2_blocks_t)"

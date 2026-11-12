@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Optimizing Speculative Decoding on an RTX 5070</title>
+<title>Up to 2.09x Faster Speculative Decoding on an 8 GB RTX 5070</title>
 <meta name="description" content="How I made SGLang&#x27;s NEXTN speculative decoding for Qwen3.5-2B up to 2.1x faster on an 8 GB laptop GPU without touching the BF16 target model.">
 <meta name="author" content="Ravi Kothari">
 <meta name="theme-color" content="#faf9f6">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="site"><a class="brand" href="index.html">Ravi Kothari</a><a class="repo-link" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization" target="_blank" rel="noopener noreferrer">GitHub repository</a></header>
+<header class="site"><a class="brand" href="../../index.html">Ravi Kothari</a><a class="repo-link" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/speculative-decoding" target="_blank" rel="noopener noreferrer">GitHub repository</a></header>
 <main>
 <article>
 <header class="post">
-<h1>Optimizing Speculative Decoding on an RTX 5070</h1>
+<h1>Up to 2.09x Faster Speculative Decoding on an 8 GB RTX 5070</h1>
 <p class="subtitle">CUDA, quantized drafting, split-KV attention, and the limits of memory bandwidth.</p>
 <p class="meta">October 27, 2026 · RTX 5070 Laptop GPU (SM120, 8 GB) · SGLang 0.5.21 · Qwen3.5-2B BF16</p>
 </header>
-<p>An 8 GB laptop GPU is not where anyone expects fast LLM inference. I wanted to find out how far single-request speculative decoding could be pushed on one anyway, without touching the BF16 target model. I followed each speculative round from SGLang's scheduler down to individual CUDA kernels, and then went after what the traces showed. I made drafting cheaper, and I gave the GPU more parallel work while the target verifies the draft's tokens. The target never changed: it still checks every proposed token in BF16, so the whole speedup comes from the machinery around it. Some of that machinery is my own code, and some is upstream work I enabled and combined; I separate the two in <a href="#what-i-built-and-what-i-reused">What I built and what I reused</a>. Readers who want the measurements first can jump directly to the <a href="#final-results">final paired results</a>.</p>
+<p>On an 8 GB RTX 5070 Laptop GPU, I improved SGLang's single-request speculative-decoding throughput by <strong>93.3% on a 1K code prompt, 109.0% on a 4K code prompt, and 63.8% on MT-Bench writing</strong>. I followed each round from SGLang's scheduler to its CUDA kernels, made drafting cheaper, and exposed more parallel verification work. The BF16 target remained unchanged and continued to verify every committed token. I separate my code from the upstream work I adapted in <a href="#what-i-built-and-what-i-reused">What I built and what I reused</a>; the complete measurements are in <a href="#final-results">Final paired results</a>.</p>
 <div class="stat-grid">
 <div class="stat"><p class="stat-num">+93.3%</p><p class="stat-label">Code, 1K prompt<br>113.2 to 222.0 tok/s</p></div>
 <div class="stat"><p class="stat-num">+109.0%</p><p class="stat-label">Code, 4K prompt<br>93.7 to 196.4 tok/s</p></div>

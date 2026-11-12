@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
+<title id="title">Verification length has a measurable MoE cost</title><desc id="desc">Graph-timed MoE work across 40 layers with real routing and row remapping</desc>
+<rect width="1000" height="560" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">Verification length has a measurable MoE cost</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">Graph-timed MoE work across 40 layers with real routing and row remapping</text>
+<line x1="100" y1="460.0" x2="950" y2="460.0" stroke="#e6e8e3"/>
+<text x="82" y="465.0" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">1</text>
+<line x1="100" y1="398.9" x2="950" y2="398.9" stroke="#e6e8e3"/>
+<text x="82" y="403.9" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">2</text>
+<line x1="100" y1="337.8" x2="950" y2="337.8" stroke="#e6e8e3"/>
+<text x="82" y="342.8" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">3</text>
+<line x1="100" y1="276.7" x2="950" y2="276.7" stroke="#e6e8e3"/>
+<text x="82" y="281.7" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">4</text>
+<line x1="100" y1="215.6" x2="950" y2="215.6" stroke="#e6e8e3"/>
+<text x="82" y="220.6" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">5</text>
+<line x1="100" y1="154.4" x2="950" y2="154.4" stroke="#e6e8e3"/>
+<text x="82" y="159.4" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">6</text>
+<polyline points="100.0,444.5 135.7,418.2 207.0,380.1 278.3,345.9 349.6,314.1 420.9,293.4 492.2,272.9 563.5,254.0 634.8,227.9" fill="none" stroke="#126c60" stroke-width="4"/>
+<circle cx="100.0" cy="444.5" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=1: 1.253 ms</title></circle>
+<circle cx="135.7" cy="418.2" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=2: 1.684 ms</title></circle>
+<circle cx="207.0" cy="380.1" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=4: 2.308 ms</title></circle>
+<circle cx="278.3" cy="345.9" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=6: 2.867 ms</title></circle>
+<circle cx="349.6" cy="314.1" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=8: 3.387 ms</title></circle>
+<circle cx="420.9" cy="293.4" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=10: 3.727 ms</title></circle>
+<circle cx="492.2" cy="272.9" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=12: 4.062 ms</title></circle>
+<circle cx="563.5" cy="254.0" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=14: 4.371 ms</title></circle>
+<circle cx="634.8" cy="227.9" r="4" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>M=16, L=16: 4.798 ms</title></circle>
+<polyline points="100.0,431.6 135.7,406.5 207.0,366.7 278.3,337.1 349.6,310.2 420.9,285.4 492.2,267.3 563.5,245.3 634.8,219.1 706.1,199.5 777.4,185.2 848.7,171.5 920.0,149.0" fill="none" stroke="#7f8d93" stroke-width="4"/>
+<circle cx="100.0" cy="431.6" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=1: 1.465 ms</title></circle>
+<circle cx="135.7" cy="406.5" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=2: 1.875 ms</title></circle>
+<circle cx="207.0" cy="366.7" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=4: 2.526 ms</title></circle>
+<circle cx="278.3" cy="337.1" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=6: 3.011 ms</title></circle>
+<circle cx="349.6" cy="310.2" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=8: 3.452 ms</title></circle>
+<circle cx="420.9" cy="285.4" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=10: 3.857 ms</title></circle>
+<circle cx="492.2" cy="267.3" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=12: 4.154 ms</title></circle>
+<circle cx="563.5" cy="245.3" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=14: 4.514 ms</title></circle>
+<circle cx="634.8" cy="219.1" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=16: 4.942 ms</title></circle>
+<circle cx="706.1" cy="199.5" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=18: 5.263 ms</title></circle>
+<circle cx="777.4" cy="185.2" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=20: 5.496 ms</title></circle>
+<circle cx="848.7" cy="171.5" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=22: 5.721 ms</title></circle>
+<circle cx="920.0" cy="149.0" r="4" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>M=24, L=24: 6.089 ms</title></circle>
+<text x="100.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">1</text>
+<text x="207.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">4</text>
+<text x="349.6" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">8</text>
+<text x="492.2" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">12</text>
+<text x="634.8" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">16</text>
+<text x="777.4" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">20</text>
+<text x="920.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">24</text>
+<text x="510" y="525" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="15">Rows verified, L</text>
+<text x="26" y="320" transform="rotate(-90 26 320)" fill="#60717a" font-family="system-ui" font-size="15">MoE ms per round</text>
+<line x1="760" y1="48" x2="785" y2="48" stroke="#126c60" stroke-width="4"/><text x="793" y="53" fill="#1e2b34" font-family="system-ui" font-size="14">M=16 graph</text>
+<line x1="875" y1="48" x2="900" y2="48" stroke="#7f8d93" stroke-width="4"/><text x="908" y="53" fill="#1e2b34" font-family="system-ui" font-size="14">M=24</text>
+</svg>

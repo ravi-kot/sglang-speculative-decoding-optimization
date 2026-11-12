@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="600" viewBox="0 0 1120 600" role="img" aria-labelledby="title desc">
+<title id="title">Why block 24 regressed before the fixes</title><desc id="desc">Nsight Systems attribution relative to block 16 + AVL; only labeled timings are separately quantified</desc>
+<rect width="1120" height="600" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">Why block 24 regressed before the fixes</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">Nsight Systems attribution relative to block 16 + AVL; only labeled timings are separately quantified</text>
+<rect x="42" y="118" width="1036" height="76" rx="12" fill="#eef4f1" stroke="#dbe8e0"/>
+<text x="70" y="151" fill="#126c60" font-family="system-ui" font-size="25" font-weight="750">+1.90 ms / round</text>
+<text x="70" y="177" fill="#60717a" font-family="system-ui" font-size="15">Plain block 24 overhead before L-skip and exact M=24 fixes</text>
+<rect x="42" y="222" width="240" height="190" rx="12" fill="#ffffff" stroke="#e6e8e3" stroke-width="2"/>
+<text x="60" y="258" fill="#1e2b34" font-family="system-ui" font-size="18" font-weight="700">Bole solve</text>
+<text x="60" y="290" fill="#60717a" font-family="system-ui" font-size="15">T=24 padded to 32</text>
+<rect x="60" y="314" width="204" height="35" rx="6" fill="#f3f6f3"/>
+<text x="162" y="337" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="14" font-weight="700">+0.39 ms / round</text>
+<line x1="162" y1="360" x2="162" y2="378" stroke="#60717a" stroke-width="2"/>
+<path d="M 157 373 L 162 381 L 167 373" fill="none" stroke="#60717a" stroke-width="2"/>
+<text x="162" y="400" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">BV8 + 2 warps</text>
+<rect x="304" y="222" width="240" height="190" rx="12" fill="#ffffff" stroke="#e6e8e3" stroke-width="2"/>
+<text x="322" y="258" fill="#1e2b34" font-family="system-ui" font-size="18" font-weight="700">Dense FP8 GEMMs</text>
+<text x="322" y="290" fill="#60717a" font-family="system-ui" font-size="15">Split-K + reduction</text>
+<rect x="322" y="314" width="204" height="35" rx="6" fill="#f3f6f3"/>
+<text x="424" y="337" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="14" font-weight="700">+0.44 ms / round</text>
+<line x1="424" y1="360" x2="424" y2="378" stroke="#60717a" stroke-width="2"/>
+<path d="M 419 373 L 424 381 L 429 373" fill="none" stroke="#60717a" stroke-width="2"/>
+<text x="424" y="400" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">Narrow path to M≤24</text>
+<rect x="566" y="222" width="240" height="190" rx="12" fill="#ffffff" stroke="#e6e8e3" stroke-width="2"/>
+<text x="584" y="258" fill="#1e2b34" font-family="system-ui" font-size="18" font-weight="700">Full attention</text>
+<text x="584" y="290" fill="#60717a" font-family="system-ui" font-size="15">Third 64-row query tile</text>
+<rect x="584" y="314" width="204" height="35" rx="6" fill="#f3f6f3"/>
+<text x="686" y="337" text-anchor="middle" fill="#7f8d93" font-family="system-ui" font-size="14" font-weight="700">Observed in trace</text>
+<line x1="686" y1="360" x2="686" y2="378" stroke="#60717a" stroke-width="2"/>
+<path d="M 681 373 L 686 381 L 691 373" fill="none" stroke="#60717a" stroke-width="2"/>
+<text x="686" y="400" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">L-skip by AVL L</text>
+<rect x="828" y="222" width="240" height="190" rx="12" fill="#ffffff" stroke="#e6e8e3" stroke-width="2"/>
+<text x="846" y="258" fill="#1e2b34" font-family="system-ui" font-size="18" font-weight="700">BA + convolution</text>
+<text x="846" y="290" fill="#60717a" font-family="system-ui" font-size="15">Fast paths ended at 16</text>
+<rect x="846" y="314" width="204" height="35" rx="6" fill="#f3f6f3"/>
+<text x="948" y="337" text-anchor="middle" fill="#7f8d93" font-family="system-ui" font-size="14" font-weight="700">Observed in trace</text>
+<line x1="948" y1="360" x2="948" y2="378" stroke="#60717a" stroke-width="2"/>
+<path d="M 943 373 L 948 381 L 953 373" fill="none" stroke="#60717a" stroke-width="2"/>
+<text x="948" y="400" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="14">Remaining exact headroom</text>
+<rect x="42" y="444" width="1036" height="86" rx="12" fill="#f5f7f4" stroke="#e6e8e3"/>
+<text x="70" y="478" fill="#1e2b34" font-family="system-ui" font-size="17" font-weight="700">After the targeted fixes</text>
+<text x="70" y="507" fill="#60717a" font-family="system-ui" font-size="15">Block-24 overhead fell to +1.29 ms thinking off and +0.76 ms thinking on; the 128-turn result reproduced on two boots.</text>
+<text x="42" y="566" fill="#60717a" font-family="system-ui" font-size="13">The four cards are a profiler map, not a stacked total. Attention and BA/conv were observed in the trace but not assigned standalone milliseconds.</text>
+</svg>

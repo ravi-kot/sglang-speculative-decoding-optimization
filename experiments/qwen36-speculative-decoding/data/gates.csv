@@ -1,0 +1,46 @@
+kernel,case,context_tokens,baseline_us,candidate_us,max_abs_diff,session
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",18000,37.5,29.7,9.2e-05,s15
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",48000,73.6,56.2,6.1e-05,s15
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",101000,123.0,93.3,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",165000,204.2,149.9,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",18000,43.5,30.4,1.2e-04,s15
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",18000,43.5,37.5,1.2e-04,s15
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",48000,99.3,57.7,6.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",48000,99.3,75.1,6.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",101000,181.0,92.8,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",101000,181.0,121.8,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",165000,300.3,149.9,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",165000,300.3,204.2,3.1e-05,s15
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",18000,37.1,30.6,1.2e-04,s16
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",48000,76.0,57.3,6.1e-05,s16
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",101000,127.2,93.8,3.1e-05,s16
+"L-skip (FlashInfer plan variant)","B16 keep 1/2 tiles",165000,204.5,150.0,3.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",18000,42.8,29.9,7.6e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",18000,42.8,36.9,1.2e-04,s16
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",48000,102.8,57.2,6.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",48000,102.8,76.6,6.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",101000,182.6,93.4,3.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",101000,182.6,122.9,6.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 1/3 tiles",165000,310.1,149.5,3.1e-05,s16
+"L-skip (FlashInfer plan variant)","B24 keep 2/3 tiles",165000,310.1,204.4,3.1e-05,s16
+"Own Triton 128-row attention (rejected)","B16 rows<16, cfg 32, 8, 1, 128",18000,37.9,62.9,6.07e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<12, cfg 32, 8, 1, 128",18000,37.9,62.9,6.07e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<8, cfg 32, 8, 1, 128",18000,37.9,27.9,6.07e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<4, cfg 32, 8, 1, 128",18000,37.9,26.2,6.02e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<16, cfg 32, 8, 1, 128",48000,76.9,136.1,3.50e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<12, cfg 32, 8, 1, 128",48000,76.9,136.1,3.50e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<8, cfg 32, 8, 1, 128",48000,76.9,69.4,3.50e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<4, cfg 32, 8, 1, 128",48000,76.9,55.7,2.84e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<16, cfg 32, 8, 1, 128",101000,130.2,262.6,2.16e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<12, cfg 32, 8, 1, 128",101000,130.2,262.4,2.16e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<8, cfg 32, 8, 1, 128",101000,130.2,139.4,2.16e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<4, cfg 32, 8, 1, 128",101000,130.2,104.9,2.08e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<16, cfg 32, 8, 1, 128",165000,215.8,411.5,1.95e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<12, cfg 32, 8, 1, 128",165000,215.8,409.6,1.95e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<8, cfg 32, 8, 1, 128",165000,215.8,219.0,1.89e-05,s15
+"Own Triton 128-row attention (rejected)","B16 rows<4, cfg 32, 8, 1, 128",165000,215.8,168.9,1.89e-05,s15
+"s5 narrow dense GEMM out_o_proj (bitwise equal M=1..24)","M=24 cold",,23.2,21.0,"0 (bitwise)",s16
+"s5 narrow dense GEMM qkvz (bitwise equal M=1..24)","M=24 cold",,35.5,37.1,"0 (bitwise)",s16
+"s5 narrow dense GEMM attn_qkv (bitwise equal M=1..24)","M=24 cold",,29.5,31.0,"0 (bitwise)",s16
+"Bole verify, solve V tile 8 + 2 warps (bitwise equal)","T=24, 1 layer, graph",,27.68,21.62,"0 (bitwise)","s16 (console)"
+"Bole verify, default","T=16 vs T=24 default",,12.1,27.68,-,"s16 (console)"

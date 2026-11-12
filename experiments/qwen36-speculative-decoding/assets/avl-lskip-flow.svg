@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="470" viewBox="0 0 1120 470" role="img" aria-labelledby="title desc">
+<title id="title">One cutoff, two kinds of saved work</title><desc id="desc">Illustrative round with a fixed M=24 CUDA graph and AVL selecting L=8</desc>
+<rect width="1120" height="470" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">One cutoff, two kinds of saved work</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">Illustrative round with a fixed M=24 CUDA graph and AVL selecting L=8</text>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#60717a"/></marker></defs>
+<rect x="40" y="135" width="180" height="168" rx="13" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="68" cy="164" r="16" fill="#7f8d93"/><text x="68" y="170" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">1</text>
+<text x="58" y="210" fill="#1e2b34" font-family="system-ui" font-size="19" font-weight="700">DFlash2</text>
+<text x="58" y="242" fill="#60717a" font-family="system-ui" font-size="16">Proposes 24</text>
+<text x="58" y="268" fill="#60717a" font-family="system-ui" font-size="16">parallel positions</text>
+<line x1="224" y1="219" x2="250" y2="219" stroke="#60717a" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="255" y="135" width="180" height="168" rx="13" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="283" cy="164" r="16" fill="#126c60"/><text x="283" y="170" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">2</text>
+<text x="273" y="210" fill="#1e2b34" font-family="system-ui" font-size="19" font-weight="700">AVL</text>
+<text x="273" y="242" fill="#60717a" font-family="system-ui" font-size="16">Selects L = 8</text>
+<text x="273" y="268" fill="#60717a" font-family="system-ui" font-size="16">for this round</text>
+<line x1="439" y1="219" x2="465" y2="219" stroke="#60717a" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="470" y="135" width="180" height="168" rx="13" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="498" cy="164" r="16" fill="#126c60"/><text x="498" y="170" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">3</text>
+<text x="488" y="210" fill="#1e2b34" font-family="system-ui" font-size="19" font-weight="700">MoE remap</text>
+<text x="488" y="242" fill="#60717a" font-family="system-ui" font-size="16">Rows 8–23 reuse</text>
+<text x="488" y="268" fill="#60717a" font-family="system-ui" font-size="16">row 0 experts</text>
+<line x1="654" y1="219" x2="680" y2="219" stroke="#60717a" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="685" y="135" width="180" height="168" rx="13" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="713" cy="164" r="16" fill="#78aaa1"/><text x="713" y="170" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">4</text>
+<text x="703" y="210" fill="#1e2b34" font-family="system-ui" font-size="19" font-weight="700">L-skip</text>
+<text x="703" y="242" fill="#60717a" font-family="system-ui" font-size="16">Selects the 1-tile</text>
+<text x="703" y="268" fill="#60717a" font-family="system-ui" font-size="16">FlashInfer plan</text>
+<line x1="869" y1="219" x2="895" y2="219" stroke="#60717a" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="900" y="135" width="180" height="168" rx="13" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="928" cy="164" r="16" fill="#7f8d93"/><text x="928" y="170" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">5</text>
+<text x="918" y="210" fill="#1e2b34" font-family="system-ui" font-size="19" font-weight="700">Acceptance</text>
+<text x="918" y="242" fill="#60717a" font-family="system-ui" font-size="16">Positions 8–23</text>
+<text x="918" y="268" fill="#60717a" font-family="system-ui" font-size="16">cannot commit</text>
+<rect x="255" y="323" width="395" height="42" rx="8" fill="#edf5f2"/>
+<text x="452" y="349" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="16" font-weight="700">AVL reduces MoE expert work</text>
+<rect x="685" y="323" width="395" height="42" rx="8" fill="#f0f4f3"/>
+<text x="882" y="349" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="16" font-weight="700">L-skip reduces attention work</text>
+<rect x="40" y="394" width="1040" height="42" rx="8" fill="#f5f7f4" stroke="#e6e8e3"/>
+<text x="560" y="420" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">The CUDA graph keeps M=24 tensors; L changes useful work and the acceptance cutoff, not the captured shape.</text>
+</svg>

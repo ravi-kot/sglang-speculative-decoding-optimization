@@ -11,9 +11,9 @@
     a{color:var(--accent)}.wrap{width:min(100% - 36px,1050px);margin:auto}.top{display:flex;justify-content:space-between;align-items:center;padding:24px 0;border-bottom:1px solid var(--line)}
     .brand{font-weight:750;text-decoration:none;color:var(--ink)}.repo{font-size:.9rem}.hero{padding:76px 0 52px;max-width:820px}.eyebrow{color:var(--accent);font-weight:750;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem}
     h1{font-size:clamp(2.25rem,7vw,4.5rem);line-height:1.05;letter-spacing:-.045em;margin:.25em 0}.lede{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--muted);max-width:720px}
-    h2{font-size:1.6rem;margin:0 0 20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;padding-bottom:80px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 12px 32px rgba(16,42,67,.05)}
+    h2{font-size:1.6rem;margin:0 0 20px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;padding-bottom:80px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 12px 32px rgba(16,42,67,.05)}
     .card h3{font-size:1.35rem;line-height:1.25;margin:8px 0}.card p{color:var(--muted);margin:0 0 22px}.tag{display:inline-block;background:var(--soft);color:var(--accent);padding:4px 10px;border-radius:999px;font-size:.78rem;font-weight:700}.open{font-weight:700;text-decoration:none}.open:hover{text-decoration:underline}
-    footer{border-top:1px solid var(--line);padding:25px 0 40px;color:var(--muted);font-size:.9rem}@media(max-width:650px){.grid{grid-template-columns:1fr}.hero{padding-top:52px}.repo{display:none}}
+    footer{border-top:1px solid var(--line);padding:25px 0 40px;color:var(--muted);font-size:.9rem}@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.grid{grid-template-columns:1fr}.hero{padding-top:52px}.repo{display:none}}
   </style>
 </head>
 <body>
@@ -30,6 +30,7 @@
         <div class="grid">
           <article class="card"><span class="tag">CUDA kernel</span><h3>Small-M fused-add RMSNorm</h3><p>Testing a one-row-per-block mapping for Gemma RMSNorm and locating the shapes where additional parallelism helps.</p><a class="open" href="experiments/rmsnorm/">Read the experiment</a></article>
           <article class="card"><span class="tag">Model serving</span><h3>Speculative decoding on an 8 GB GPU</h3><p>Following SGLang's speculative round to its CUDA kernels, then reducing draft cost and improving verification parallelism.</p><a class="open" href="experiments/speculative-decoding/">Read the experiment</a></article>
+          <article class="card"><span class="tag">Agent inference</span><h3>975 tok/s Qwen3.6 speculative decoding</h3><p>Scaling parallel drafts beyond eight tokens, pricing MoE verification, and removing block-24 fallbacks on one RTX PRO 6000.</p><a class="open" href="experiments/qwen36-speculative-decoding/">Read the experiment</a></article>
         </div>
       </section>
     </main>

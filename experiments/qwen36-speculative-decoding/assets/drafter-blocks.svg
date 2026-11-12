@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
+<title id="title">A larger block needed preserved early accuracy</title><desc id="desc">Offline thinking-on tokens per round on held-out validation traces</desc>
+<rect width="1000" height="560" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">A larger block needed preserved early accuracy</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">Offline thinking-on tokens per round on held-out validation traces</text>
+<line x1="100" y1="460.0" x2="950" y2="460.0" stroke="#e6e8e3"/>
+<text x="82" y="465.0" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">5.0</text>
+<line x1="100" y1="388.4" x2="950" y2="388.4" stroke="#e6e8e3"/>
+<text x="82" y="393.4" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">5.5</text>
+<line x1="100" y1="316.8" x2="950" y2="316.8" stroke="#e6e8e3"/>
+<text x="82" y="321.8" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">6.0</text>
+<line x1="100" y1="245.2" x2="950" y2="245.2" stroke="#e6e8e3"/>
+<text x="82" y="250.2" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">6.5</text>
+<line x1="100" y1="173.6" x2="950" y2="173.6" stroke="#e6e8e3"/>
+<text x="82" y="178.6" text-anchor="end" fill="#60717a" font-family="system-ui" font-size="14">7.0</text>
+<polyline points="100.0,401.3 305.0,326.0 510.0,279.7 715.0,259.8 920.0,261.0" fill="none" stroke="#7f8d93" stroke-width="4"/>
+<circle cx="100.0" cy="401.3" r="5" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>Coral: 5.41</title></circle>
+<circle cx="305.0" cy="326.0" r="5" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>Coral: 5.94</title></circle>
+<circle cx="510.0" cy="279.7" r="5" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>Coral: 6.26</title></circle>
+<circle cx="715.0" cy="259.8" r="5" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>Coral: 6.40</title></circle>
+<circle cx="920.0" cy="261.0" r="5" fill="#ffffff" stroke="#7f8d93" stroke-width="3"><title>Coral: 6.39</title></circle>
+<polyline points="100.0,432.4 305.0,365.8 510.0,324.0 715.0,293.8 920.0,275.2" fill="none" stroke="#78aaa1" stroke-width="4"/>
+<circle cx="100.0" cy="432.4" r="5" fill="#ffffff" stroke="#78aaa1" stroke-width="3"><title>Run 1: 5.19</title></circle>
+<circle cx="305.0" cy="365.8" r="5" fill="#ffffff" stroke="#78aaa1" stroke-width="3"><title>Run 1: 5.66</title></circle>
+<circle cx="510.0" cy="324.0" r="5" fill="#ffffff" stroke="#78aaa1" stroke-width="3"><title>Run 1: 5.95</title></circle>
+<circle cx="715.0" cy="293.8" r="5" fill="#ffffff" stroke="#78aaa1" stroke-width="3"><title>Run 1: 6.16</title></circle>
+<circle cx="920.0" cy="275.2" r="5" fill="#ffffff" stroke="#78aaa1" stroke-width="3"><title>Run 1: 6.29</title></circle>
+<polyline points="100.0,404.4 305.0,331.1 510.0,279.6 715.0,244.9 920.0,222.6" fill="none" stroke="#126c60" stroke-width="4"/>
+<circle cx="100.0" cy="404.4" r="5" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>Run 2 + KL: 5.39</title></circle>
+<circle cx="305.0" cy="331.1" r="5" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>Run 2 + KL: 5.90</title></circle>
+<circle cx="510.0" cy="279.6" r="5" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>Run 2 + KL: 6.26</title></circle>
+<circle cx="715.0" cy="244.9" r="5" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>Run 2 + KL: 6.50</title></circle>
+<circle cx="920.0" cy="222.6" r="5" fill="#ffffff" stroke="#126c60" stroke-width="3"><title>Run 2 + KL: 6.66</title></circle>
+<text x="100.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">8</text>
+<text x="305.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">10</text>
+<text x="510.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">12</text>
+<text x="715.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">14</text>
+<text x="920.0" y="493" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15">16</text>
+<text x="510" y="525" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="15">Maximum draft block</text>
+<line x1="620" y1="108" x2="644" y2="108" stroke="#7f8d93" stroke-width="4"/>
+<text x="651" y="113" fill="#1e2b34" font-family="system-ui" font-size="13">Coral</text>
+<line x1="732" y1="108" x2="756" y2="108" stroke="#78aaa1" stroke-width="4"/>
+<text x="763" y="113" fill="#1e2b34" font-family="system-ui" font-size="13">Run 1</text>
+<line x1="844" y1="108" x2="868" y2="108" stroke="#126c60" stroke-width="4"/>
+<text x="875" y="113" fill="#1e2b34" font-family="system-ui" font-size="13">Run 2 + KL</text>
+</svg>

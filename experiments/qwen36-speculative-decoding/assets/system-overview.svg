@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
+<title id="title">How one speculative round works</title><desc id="desc">One request on one GPU; the Qwen3.6 target weights and numeric formats remain unchanged</desc>
+<rect width="1120" height="520" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">How one speculative round works</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">One request on one GPU; the Qwen3.6 target weights and numeric formats remain unchanged</text>
+<defs><marker id="overview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#60717a"/></marker></defs>
+<rect x="40" y="130" width="245" height="205" rx="14" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="70" cy="161" r="17" fill="#7f8d93"/>
+<text x="70" y="167" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">1</text>
+<text x="60" y="210" fill="#1e2b34" font-family="system-ui" font-size="20" font-weight="700">DFlash2 drafts</text>
+<text x="60" y="244" fill="#60717a" font-family="system-ui" font-size="16">Propose 8, 16, or 24</text>
+<text x="60" y="271" fill="#60717a" font-family="system-ui" font-size="16">positions in parallel</text>
+<rect x="60" y="291" width="205" height="30" rx="6" fill="#edf5f2"/>
+<text x="162.5" y="311" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="13" font-weight="700">Longer-block training</text>
+<line x1="289" y1="230" x2="300" y2="230" stroke="#60717a" stroke-width="2" marker-end="url(#overview-arrow)"/>
+<rect x="305" y="130" width="245" height="205" rx="14" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="335" cy="161" r="17" fill="#126c60"/>
+<text x="335" y="167" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">2</text>
+<text x="325" y="210" fill="#1e2b34" font-family="system-ui" font-size="20" font-weight="700">Target verifies</text>
+<text x="325" y="244" fill="#60717a" font-family="system-ui" font-size="16">Qwen3.6 checks the</text>
+<text x="325" y="271" fill="#60717a" font-family="system-ui" font-size="16">candidate prefix</text>
+<rect x="325" y="291" width="205" height="30" rx="6" fill="#edf5f2"/>
+<text x="427.5" y="311" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="13" font-weight="700">AVL + MoE remap</text>
+<line x1="554" y1="230" x2="565" y2="230" stroke="#60717a" stroke-width="2" marker-end="url(#overview-arrow)"/>
+<rect x="570" y="130" width="245" height="205" rx="14" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="600" cy="161" r="17" fill="#126c60"/>
+<text x="600" y="167" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">3</text>
+<text x="590" y="210" fill="#1e2b34" font-family="system-ui" font-size="20" font-weight="700">Useful work shrinks</text>
+<text x="590" y="244" fill="#60717a" font-family="system-ui" font-size="16">Attention follows the</text>
+<text x="590" y="271" fill="#60717a" font-family="system-ui" font-size="16">selected prefix</text>
+<rect x="590" y="291" width="205" height="30" rx="6" fill="#edf5f2"/>
+<text x="692.5" y="311" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="13" font-weight="700">L-skip</text>
+<line x1="819" y1="230" x2="830" y2="230" stroke="#60717a" stroke-width="2" marker-end="url(#overview-arrow)"/>
+<rect x="835" y="130" width="245" height="205" rx="14" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
+<circle cx="865" cy="161" r="17" fill="#7f8d93"/>
+<text x="865" y="167" text-anchor="middle" fill="white" font-family="system-ui" font-size="15" font-weight="700">4</text>
+<text x="855" y="210" fill="#1e2b34" font-family="system-ui" font-size="20" font-weight="700">Prefix commits</text>
+<text x="855" y="244" fill="#60717a" font-family="system-ui" font-size="16">Accepted tokens advance</text>
+<text x="855" y="271" fill="#60717a" font-family="system-ui" font-size="16">the request</text>
+<rect x="855" y="291" width="205" height="30" rx="6" fill="#edf5f2"/>
+<text x="957.5" y="311" text-anchor="middle" fill="#126c60" font-family="system-ui" font-size="13" font-weight="700">Exact M=24 kernels</text>
+<rect x="40" y="370" width="1040" height="58" rx="10" fill="#eef4f1" stroke="#dbe8e0"/>
+<text x="560" y="395" text-anchor="middle" fill="#1e2b34" font-family="system-ui" font-size="15" font-weight="700">The optimization target: more accepted tokens without proportional verification cost</text>
+<text x="560" y="417" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">Fixed throughout: target weights, FP8 deployment formats, greedy target verification, and one-GPU serving</text>
+<text x="560" y="474" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">The next sections follow this round from the drafter to the GPU kernels, then measure the combined result.</text>
+</svg>

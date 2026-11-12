@@ -8,6 +8,7 @@ Reproducible GPU inference experiments built around SGLang, with technical write
 | --- | --- | --- | --- |
 | Small-M RMSNorm | One-row-per-block mapping for fused-add Gemma RMSNorm | [Read the article](experiments/rmsnorm/) | [Experiment files](experiments/rmsnorm/README.md) |
 | Speculative decoding | Improving single-request speculative decoding on an RTX 5070 Laptop GPU | [Read the article](experiments/speculative-decoding/) | [Experiment files](experiments/speculative-decoding/README.md) |
+| 975 tok/s Qwen3.6 speculative decoding | Cost-aware verification and exact block-24 fixes on one RTX PRO 6000 | [Read the article](experiments/qwen36-speculative-decoding/) | [Experiment files](experiments/qwen36-speculative-decoding/README.md) |
 
 Each experiment is self-contained under `experiments/` so future studies can be added without mixing their code or results.
 
