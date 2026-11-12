@@ -320,6 +320,57 @@ def block24_profile():
     finish(p, ASSETS / "block24-profile.svg")
 
 
+def round_timeline():
+    """Figure-2-style view of one verification round: Nsight critical path per configuration at ~165K context."""
+    import re
+    cats = [("MoE experts", "#1f5f8b"), ("Target attention", "#3f8fc4"), ("Dense GEMMs", TEAL), ("GDN + Bole", TEAL_2),
+            ("Verify head", "#c98a2b"), ("Other + GPU gaps", "#c9ced1")]
+
+    def cat(k):
+        if re.search(r"moe|_router|act_and_mul|count_and_sort", k): return "MoE experts"
+        if re.search(r"BatchPrefill|PersistentVariableLength", k): return "Target attention"
+        if re.match(r"cublas\(8,(485|122),1\)", k): return "Verify head"
+        if re.search(r"bole|conv1d|qkvzba|layer_norm|gate_sigmoid", k): return "GDN + Bole"
+        if re.search(r"cutlass|cublas|s5_ba|splitK|quant|Kernel2|device_kernel", k): return "Dense GEMMs"
+        return None
+    rows = [r for r in load(DATA / "nsys_kernels.csv") if r["regime"] == "3"]
+    cfg = [("n8", "Block 8 (BEST3)"), ("n16", "Block 16, plain"), ("n16l", "Block 16 + AVL + L-skip"), ("n24f", "Block 24, final")]
+    data = {}
+    for key, _ in cfg:
+        d = {c: 0.0 for c, _ in cats}; total = 0.0
+        for r in rows:
+            if r["profile"] != key: continue
+            if r["kernel"] == "_step_total": total = float(r["ms_per_step"]); continue
+            c = cat(r["kernel"])
+            if c: d[c] += float(r["ms_per_step"])
+        d["Other + GPU gaps"] = total - sum(v for c, v in d.items() if c != "Other + GPU gaps")
+        data[key] = (d, total)
+    p = shell("Where one verification round spends its time",
+              "Nsight Systems critical path, 40 profiled rounds at about 165K context; one bar = one speculative round", 1000, 560)
+    left, right, scale = 300, 900, 13.0
+    for i, (c, col) in enumerate(cats):
+        x = 56 + i * 152
+        p.append(f'<rect x="{x}" y="112" width="16" height="16" rx="3" fill="{col}"/>')
+        p.append(f'<text x="{x+22}" y="125" fill="{INK}" font-family="system-ui" font-size="13">{escape(c)}</text>')
+    for t in range(0, 14, 2):
+        x = left + t / scale * (right - left)
+        p.append(f'<line x1="{x:.1f}" y1="150" x2="{x:.1f}" y2="470" stroke="{GRID}"/>')
+        p.append(f'<text x="{x:.1f}" y="494" text-anchor="middle" fill="{MUTED}" font-family="system-ui" font-size="13">{t}</text>')
+    for i, (key, label) in enumerate(cfg):
+        d, total = data[key]; y = 170 + i * 76; x = left
+        p.append(f'<text x="{left-16}" y="{y+25}" text-anchor="end" fill="{INK}" font-family="system-ui" font-size="16" font-weight="650">{escape(label)}</text>')
+        for c, col in cats:
+            w = d[c] / scale * (right - left)
+            p.append(f'<rect x="{x:.1f}" y="{y}" width="{max(w,0):.1f}" height="38" fill="{col}" stroke="{PAPER}" stroke-width="1.5"/>')
+            if w > 44:
+                fg = PAPER if c in ("MoE experts", "Target attention", "Dense GEMMs") else INK
+                p.append(f'<text x="{x+w/2:.1f}" y="{y+24}" text-anchor="middle" fill="{fg}" font-family="system-ui" font-size="12.5">{d[c]:.2f}</text>')
+            x += w
+        p.append(f'<text x="{x+10:.1f}" y="{y+25}" fill="{INK}" font-family="system-ui" font-size="15" font-weight="700">{total:.2f} ms</text>')
+    p.append(f'<text x="{(left+right)/2:.1f}" y="524" text-anchor="middle" fill="{MUTED}" font-family="system-ui" font-size="14">Milliseconds per speculative round (draft + verify + commit). MoE varies with routing and the length AVL selects.</text>')
+    finish(p, ASSETS / "round-timeline.svg")
+
+
 if __name__ == "__main__":
     throughput()
     context_speedup()
@@ -329,5 +380,6 @@ if __name__ == "__main__":
     avl_lskip_flow()
     block24_overhead()
     block24_profile()
-    print("generated 8 SVG figures")
+    round_timeline()
+    print("generated 9 SVG figures")
 

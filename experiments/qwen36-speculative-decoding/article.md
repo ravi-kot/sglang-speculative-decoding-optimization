@@ -1,6 +1,6 @@
 I wanted to maximize correct, single-request decode speed for Qwen3.6-35B-A3B-FP8 on one GPU. I kept the target model's weights and numeric formats unchanged. The path went from stock SGLang at **335 tok/s with thinking off** and **319 tok/s with thinking on**, to **975 and 717 tok/s** on a separate 512-turn benchmark. That is **2.91x and 2.25x** the stock throughput. <span class="tag meas">Measured</span>
 
-The engineering challenge was to accept more draft tokens without making target verification proportionally more expensive. I extended Coral's DFlash2 work with teacher-guided longer-block training, cost-aware verification, FlashInfer plan selection, and exact block-24 kernel fixes. The target remained in its existing FP8 representation throughout. [Jump to the final benchmark](#final-independent-benchmark), or follow the profiling decisions that produced it.
+The engineering challenge was to accept more draft tokens without making target verification proportionally more expensive. I extended Coral's DFlash2 work with teacher–student knowledge distillation for longer blocks, cost-aware verification, FlashInfer plan selection, and exact block-24 kernel fixes. The target remained in its existing FP8 representation throughout. [Jump to the final benchmark](#final-independent-benchmark), or follow the profiling decisions that produced it.
 
 <div class="stat-grid">
 <div class="stat"><p class="stat-num">975 tok/s</p><p class="stat-label">Thinking off · 335 to 975 tok/s<br><strong>2.91x stock throughput</strong></p></div>
@@ -28,7 +28,7 @@ The engineering challenge was to accept more draft tokens without making target 
 | Configuration | Thinking off | Thinking on | Accepted tokens per round, off / on | Throughput vs stock, off / on |
 |---|---:|---:|---:|---:|
 | Stock SGLang MTP-4 | 335 tok/s | 319 tok/s | 4.62 / 4.33 | 1.00x / 1.00x |
-| Block 8, BEST3 | 735 tok/s | 635 tok/s | 6.53 / 5.70 | 2.20x / 1.99x |
+| Block 8, [BEST3](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts) | 735 tok/s | 635 tok/s | 6.53 / 5.70 | 2.20x / 1.99x |
 | Block 16 + AVL | 937 tok/s | 709 tok/s | 10.08 / 7.57 | 2.80x / 2.23x |
 | **Block 24 + AVL + L-skip + exact fixes** | **975 tok/s** | **717 tok/s** | **12.15 / 8.55** | **2.91x / 2.25x** |
 
@@ -81,11 +81,18 @@ I began the early serving experiments on an NVIDIA L4, then moved the full Qwen3
 
 The model is hybrid. Most layers use Gated DeltaNet, a recurrent linear-attention mechanism that carries state forward. Ten layers use full attention over the key/value cache. Speculative verification therefore has to manage both recurrent state and attention cache while routing each verified row through a mixture of experts.
 
-Earlier work had already produced the exact optimized [BEST3 serving baseline](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding/code/q36). It included a backport of [Bole](https://arxiv.org/abs/2608.01651) for linear-attention state, based on [SGLang pull request 46702](https://github.com/sgl-project/sglang/pull/46702); sync-free attention planning; narrow-tile FP8 matrix multiplications; an `in_proj_ba` kernel bitwise equal to stock; a 48K hot draft vocabulary; and an 8K drafter context window. <span class="tag meas">Measured baseline</span>
+Earlier work had already produced the exact optimized [BEST3 serving baseline](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts). It included a backport of [Bole](https://arxiv.org/abs/2608.01651) for linear-attention state, based on [SGLang pull request 46702](https://github.com/sgl-project/sglang/pull/46702); sync-free attention planning; narrow-tile FP8 matrix multiplications; an `in_proj_ba` kernel bitwise equal to stock; a 48K hot draft vocabulary; and an 8K drafter context window. The repository now links the exact BEST3 configuration, implementation, profiler rows, correctness data, and benchmark rows in one place. <span class="tag meas">Measured baseline</span>
 
-In the measurements below, batch size 1, or BS1, means one active request. Greedy decoding chooses the target's highest-scoring next token. Thinking off and thinking on are the model's two response modes; thinking on includes its reasoning segment before the tool-facing answer. Each benchmark configuration fixes the checkpoint, hook settings, kernels, and serving flags.
+<div class="definition-grid">
+<div class="definition-card"><p><strong>BS1, greedy</strong> · one active request; the target's top-scoring token is kept at every step.</p></div>
+<div class="definition-card"><p><strong>Thinking off / on</strong> · Qwen3.6's two response modes; thinking on adds a reasoning segment before the tool call.</p></div>
+</div>
 
-## 3. Experimental setup and measurement {#measurement}
+With the target and BEST3 baseline fixed, the next requirement was a measurement design that could separate a real improvement from a favorable prompt mix or a stale control.
+
+## 3. Prior measurements and experimental setup {#measurement}
+
+Earlier sessions taught me which numbers to trust. Single runs drifted by about 0.1 ms per round between boots, short synthetic prompts flattered acceptance, and one "independent" turn set later turned out to share traces with training data. Every decision below therefore rests on the same four ingredients: realistic prompts, a fixed workload mix, paired comparisons on the same boot, and confidence intervals that respect how the prompts were sampled.
 
 The prompts came from MLCommons agentic-coding traces. They are histories from coding-agent sessions, including long context and tool traffic. I split them into four context bins: shorter than 32K tokens, 32K to 64K, 64K to 128K, and longer than 128K. <span class="tag meas">Measured dataset</span>
 
@@ -104,30 +111,43 @@ This separation became important because my first supposedly independent turn se
 
 For each configuration I stored decode throughput, accepted tokens per round, round time, per-context results, and output text. Nsight Systems gave me the GPU critical path. Isolated kernel gates checked latency and numeric differences before a kernel was allowed into the server.
 
+That corrected measurement setup produced the first actionable observation: the block-8 drafter was often accepting every position available. The limit was no longer only prediction quality; the maximum block itself was censoring how many tokens a round could accept.
+
 ## 4. Why block 8 was the ceiling {#block-size-ceiling}
 
-The block-8 drafter was frequently using all the room available. In a thinking-on run, 35% of speculative rounds accepted every token the block allowed. Once that happens, better predictions cannot produce more accepted tokens without increasing the block itself. <span class="tag meas">Measured</span>
+Throughput is accepted tokens per round divided by round time, so there are only two levers. I worked both at block 8 before changing the block.
+
+| Lever at block 8 | What I did | What it bought |
+|---|---|---|
+| Shorter rounds | The [BEST3](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts) kernel work: Bole backport, sync-free planning, narrow FP8 GEMMs, exact `in_proj_ba`, fused KV writes | Round time fell to about 8.8 ms; isolated MoE kernels already read expert weights at 79–86% of DRAM peak |
+| More accepted tokens | A block-8 drafter fine-tuning pilot on target-generated data | +1.1% offline, flat on the server (0.9995 / 0.998 paired) |
+
+{{table:block8-levers}} Both block-8 levers were close to exhausted: the round was mostly memory-bound expert reads, and better block-8 predictions did not reach the server. <span class="tag meas">Measured</span>
+
+The acceptance histogram explained why the second lever stalled. The block-8 drafter was frequently using all the room available. In a thinking-on run, 35% of speculative rounds accepted every token the block allowed. Once a third of rounds hit the cap, a better drafter mostly improves rounds that already end early, and the full rounds stay capped at 8. That is why the fine-tuning pilot stayed flat, and why the next gain had to come from a larger block. <span class="tag meas">Measured</span>
 
 The released checkpoint had been trained at block size 8. Positions 9 through 16 were untrained. Simply asking for a larger block would test whether the model happened to extrapolate, not whether it had learned those positions.
 
 My first fine-tune, Run 1, extended training to block 16 at a learning rate of 1e-4. It learned the new positions, but accuracy at positions 1 through 7 decreased. Thinking-on acceptance did not improve enough. <span class="tag meas">Measured</span>
 
-That failure changed the objective. I needed to preserve the part of the drafter that already worked while teaching only the extra span. Run 2 used a frozen block-8 teacher and added a KL-divergence term over positions 1 through 7 in the [fine-tuning pipeline](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/q36/ft2_train.py). The learning rate was reduced to 3e-5. The KL term encourages the new drafter's probability distribution to remain close to the teacher where the teacher is already useful.
+Run 1 made the flaw in straightforward fine-tuning visible: the model learned positions 9 through 16 while losing accuracy at positions 1 through 7. I therefore changed the training problem from ordinary continuation training to **teacher–student knowledge distillation**.
+
+For [Run 2](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#run-2-and-run-6-artifacts), the released block-8 drafter became a frozen teacher and the block-16 drafter became the student. On the first seven predicted positions, the teacher produced a probability distribution and the student minimized KL divergence to that distribution. The student still learned the longer span from the target-generated training losses, while the distillation term preserved the behavior that already worked. The [fine-tuning implementation](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/q36/ft2_train.py) applies the teacher under `torch.no_grad()`, limits its logits to the teacher block, and adds the weighted KL term to the student loss. I reduced the learning rate to 3e-5. This was knowledge distillation for behavior preservation, not target-model compression.
 
 | Drafter | Block 8, off / on | Block 14, off / on | Block 16, off / on |
 |---|---:|---:|---:|
 | Coral released drafter | 6.58 / 5.41 | 8.44 / 6.40 | 8.39 / 6.39 |
 | Run 1 | 6.44 / 5.19 | 8.66 / 6.16 | 9.21 / 6.29 |
-| **Run 2, teacher KL** | **6.57 / 5.39** | **8.96 / 6.50** | **9.53 / 6.66** |
+| **Run 2, teacher–student distillation** | **6.57 / 5.39** | **8.96 / 6.50** | **9.53 / 6.66** |
 
-{{table:drafter-sweep}} Offline accepted tokens per round on held-out validation traces. The KL run preserved the early block while learning the later positions. <span class="tag meas">Measured</span>
+{{table:drafter-sweep}} Offline accepted tokens per round on held-out validation traces. Teacher–student distillation preserved the early block while the student learned the later positions. <span class="tag meas">Measured</span>
 
 <figure>
 <img src="assets/drafter-blocks.svg" alt="Line chart of thinking-on tokens per round across draft block sizes for Run 1 and Run 2 with teacher KL. A gray point marks the released block-8 checkpoint used as the starting point. Run 2 reaches the best block-16 value while retaining its block-8 result.">
 <figcaption>{{figure:drafter-blocks}} The released block-8 checkpoint is the starting point; the two lines show how my fine-tuning recipes behaved as the maximum block grew. Run 2 retained early-position accuracy while learning the added positions.</figcaption>
 </figure>
 
-Coral published its broader server study on an H100. The 6.58 / 5.41 values in the table are my local offline evaluation of its released drafter, while the server throughput results in this article come from the RTX PRO 6000 setup above. This keeps the published work as research context without treating different hardware and methods as a controlled comparison.
+For scale, stock SGLang's MTP-4 drafter accepts 4.62 / 4.33 tokens per round on the final benchmark, measured on the server. Coral published its broader server study on an H100. The 6.58 / 5.41 values in the table are my local offline evaluation of its released drafter, while the server throughput results in this article come from the RTX PRO 6000 setup above. This keeps the published work as research context without treating different hardware and methods as a controlled comparison.
 
 The offline result justified a server test. Block 16 improved thinking-off throughput by 25%, but thinking-on was initially flat or negative because target verification became 2.2 ms more expensive per round. Acceptance had improved; verification cost had become the next bottleneck. <span class="tag meas">Measured</span>
 
@@ -140,6 +160,13 @@ Nsight Systems split the extra time into two mechanisms.
 First, the MoE layers saw more token rows. Each row can route to a different set of eight experts. As the number of distinct experts grows, the GPU must read more expert weights. The target still reuses weights across rows, but the reuse is not free when the routing set expands.
 
 Second, full attention changed shape. At head dimension 256, FlashInfer processes the queries in 64-row tiles. The block-16 verify produced a second query tile. Its L2 hit rate increased from 10.5% to 50%, while DRAM traffic stayed near 65 MB at the 101K-context profile. That told me the second tile was reusing cached data. Its cost came from per-thread-block latency, not repeated DRAM traffic. <span class="tag meas">Measured</span>
+
+<figure class="wide-flow">
+<img src="assets/round-timeline.svg" alt="Stacked horizontal bars of one speculative round at about 165K context for block 8, block 16, block 16 with AVL and L-skip, and the final block 24. Round time is 9.77, 11.97, 11.57 and 11.75 ms; the block-16 growth sits in MoE experts and target attention, and block 24 adds GDN plus Bole time and GPU gaps while its dense GEMMs shrink.">
+<figcaption>{{figure:round-timeline}} One speculative round, broken down by the Nsight critical path. Each bar commits a different number of tokens: about 6.5 accepted tokens at block 8, about 10 at block 16, and about 12 at block 24 with thinking off. <span class="tag meas">Measured</span></figcaption>
+</figure>
+
+<p class="read-guide"><strong>Read this figure top to bottom:</strong> block 16 adds 2.2 ms, almost all of it in MoE experts and target attention. AVL and L-skip take back part of both. Block 24 then shifts the cost into GDN + Bole and GPU gaps, which section 9 traces to specific fallbacks.</p>
 
 The profile separated two decisions. MoE needed fewer useful rows so it would load fewer distinct expert weights. Attention needed fewer executed query tiles. The first led to AVL; the second later led to [L-skip](#attention-and-l-skip).
 
@@ -182,6 +209,8 @@ The graph still has a fixed 16-row or 24-row tensor shape. In the [serving hook]
 On the 128-turn engineering set, AVL improved block 16 by 4.2% with thinking off and 8.6% with thinking on using paired geometric means. The thinking-on reweighted median reached 691 tok/s, compared with 631 tok/s for block-8 BEST3. <span class="tag meas">Measured, same turns and boot</span>
 
 Dynamic speculation is established work. My implementation combines path confidence, a measured MoE cost curve, and expert-row remapping inside a fixed-shape graph; I have not found that exact combination in the prior work I reviewed.
+
+AVL proved that uncertain tails could be made cheaper. It did not answer whether those tails could be made more accurate, so I returned to the drafter with the serving path held constant.
 
 ## 7. Understanding the drafter {#drafter-training}
 
@@ -227,13 +256,15 @@ The server gain was about 1% paired. That is smaller than the isolated kernel ch
 
 Integration produced a less obvious failure. SGLang captures the verification graph using the real `plan()` call and only uses the fast path during replay. FlashInfer aliases `begin_forward` to `plan`. Patching `plan` alone therefore missed one call path. Fixing both names made the isolated result appear in the captured server path.
 
+Once L-skip made the chosen verification length control both MoE and attention work, block 16 again became acceptance-limited. That reopened the larger-block question, now with a mechanism for controlling its verification cost.
+
 ## 9. Making block 24 efficient {#block-24}
 
 Block 16 eventually showed the same ceiling as block 8: 12.3% of rounds still accepted all 16 available tokens. <span class="tag meas">Measured</span>
 
 I evaluated the Run 2 checkpoint at block 24 before training positions 17 through 24. It already reached 10.22 accepted tokens per round with thinking off and 6.80 with thinking on. That surprised me. The drafter had learned enough structure in the first 16 positions that a longer selector path still found useful continuations. <span class="tag meas">Measured</span>
 
-Run 6 then trained at block 24 with a KL teacher from Run 2 at block 16. It reached 10.51 and 6.91 tokens per round, including the first clear improvement on the thinking-on reasoning segment: 5.44 instead of 5.19. Continuing the recipe in Run 6c produced 10.49 and 6.92, so I stopped training. <span class="tag meas">Measured</span>
+[Run 6](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#run-2-and-run-6-artifacts) repeated the teacher–student method at the next scale. The frozen block-16 Run 2 checkpoint became the teacher, and a block-24 student learned positions 17 through 24 while KL divergence constrained positions 1 through 15. It reached 10.51 and 6.91 tokens per round, including the first clear improvement on the thinking-on reasoning segment: 5.44 instead of 5.19. Continuing the recipe in Run 6c produced 10.49 and 6.92, so I stopped training. <span class="tag meas">Measured</span>
 
 The first server integration reduced throughput. Compared with block 16 + AVL, block 24 was 1.2% slower with thinking off and 6% slower with thinking on. The round was 1.9 ms longer. The additional accepted tokens were not yet paying for the new execution shape. <span class="tag meas">Measured, same turns and boot</span>
 
@@ -262,6 +293,8 @@ I addressed each measured cause with the smallest compatible change. [L-skip](#a
 
 The block-24 overhead fell from 1.90 ms to 1.56 ms with L-skip, then to 1.29 ms with thinking off and 0.76 ms with thinking on after the exact fixes. On two separate boots, the best stack reached about 934 tok/s off and 702.5 tok/s on over the 128-turn engineering set. <span class="tag meas">Measured, same-turn paired reproductions</span>
 
+The [round timeline](#larger-verify-cost) also shows where the next fraction of a millisecond lives: in the final block-24 profile, GPU idle time between kernels grew from 0.44 to 0.88 ms per round while the dense GEMMs and Bole became faster. That idle time is the clearest remaining target. <span class="tag meas">Measured</span>
+
 Block 24 became useful after the execution path treated 24 rows as a tuned shape rather than a collection of fallbacks. That completed the causal chain from longer drafts to cost-aware verification, attention planning, and shape-specific kernel work.
 
 ## 10. Experiments that informed the design {#experiments-not-kept}
@@ -270,18 +303,20 @@ The configurations below remained outside the final stack, but each one narrowed
 
 | Experiment | Hypothesis | Result | Mechanism or lesson |
 |---|---|---|---|
-| Run 1 block-16 fine-tune | Training later positions would extend acceptance | Later positions improved, early positions regressed | New training erased part of the useful block-8 distribution; teacher KL was needed |
-| Hard rejection anchors | Emphasizing post-rejection tokens would repair the path | 9.52 / 6.64 offline | The loss was not the main limiter |
+| [Run 1 block-16 fine-tune](#block-size-ceiling) | Training later positions would extend acceptance | Later positions improved, early positions regressed | New training erased part of the useful block-8 distribution; teacher KL was needed |
+| [Hard rejection anchors](#drafter-training) | Emphasizing post-rejection tokens would repair the path | 9.52 / 6.64 offline | The loss was not the main limiter |
 | More Workato and SWE data | More domain data would improve reasoning acceptance | At most 9.57 / 6.66 offline | The drafter could memorize, but the held-out path stayed limited |
 | Confidence-weighted loss | Target-confidence weighting would focus on avoidable misses | Server paired ratio 0.9998 | A slightly better offline score did not translate into serving throughput |
 | 16K and 32K draft windows | More raw context would reduce misses | Worse than the 8K window | Context reach was not the active constraint |
-| Custom Triton attention | One 128-row mapping would avoid multiple query tiles | 262.6 us vs 130.2 us at 101K | FlashInfer's CUDA mapping used the GPU resources more effectively, so I retained it and reduced executed tiles |
-| Plain block 24 | More accepted tokens would outweigh verification | 1.2% lower off and 6% lower on | Bole padding, split-K GEMMs, a third attention tile, and row-count fallbacks consumed the acceptance gain |
+| [Custom Triton attention](#attention-and-l-skip) | One 128-row mapping would avoid multiple query tiles | 262.6 us vs 130.2 us at 101K | FlashInfer's CUDA mapping used the GPU resources more effectively, so I retained it and reduced executed tiles |
+| [Plain block 24](#block-24) | More accepted tokens would outweigh verification | 1.2% lower off and 6% lower on | Bole padding, split-K GEMMs, a third attention tile, and row-count fallbacks consumed the acceptance gain |
 | Run 6c continued training | More block-24 training would keep raising acceptance | 10.49 / 6.92 vs 10.51 / 6.91 | The recipe had saturated |
 
 {{table:negative-results}} Experiments excluded from the final stack and the evidence that determined the next action. <span class="tag meas">Measured</span>
 
 One run deserves an operational note. A correctness script queried the live server during the end of a thinking-on benchmark and stalled those turns. I excluded that contaminated number instead of explaining it away. A separate training run hung on a truncated feature file; the loader now skips unreadable files.
+
+At that point the training recipe, verification policy, attention plan, and M=24 kernel paths were fixed. I froze configuration selection and moved to the disjoint 512-turn benchmark.
 
 ## 11. Final results: 975 tok/s {#final-independent-benchmark}
 
@@ -292,12 +327,12 @@ After the engineering stop, I ran every final configuration sequentially on one 
 <figcaption>{{figure:final-throughput}} The independent benchmark separates the early block-8 result from the final block-24 stack; error bars show the trace-clustered 95% confidence interval.</figcaption>
 </figure>
 
-| Configuration | Off tok/s, 95% CI | On tok/s, 95% CI | Off vs stock | On vs stock |
+| Configuration | Thinking off | Thinking on | Off speedup | On speedup |
 |---|---:|---:|---:|---:|
-| Stock SGLang MTP-4 | 335, 329 to 340 | 319, 313 to 323 | 1.00x | 1.00x |
-| Block 8, BEST3, Coral drafter | 735, 718 to 750 | 635, 620 to 647 | 2.20x, 2.14 to 2.25 | 1.99x, 1.96 to 2.03 |
-| Block 16 + AVL, Run 2 | 937, 896 to 968 | 709, 686 to 721 | 2.80x, 2.70 to 2.87 | 2.23x, 2.17 to 2.27 |
-| **Block 24 + AVL + L-skip + exact fixes, Run 6** | **975, 932 to 1,003** | **717, 691 to 748** | **2.91x, 2.81 to 2.99** | **2.25x, 2.19 to 2.34** |
+| Stock SGLang MTP-4 | <span class="result-value">335 tok/s</span><br><span class="cell-note">95% CI: 329–340 tok/s</span> | <span class="result-value">319 tok/s</span><br><span class="cell-note">95% CI: 313–323 tok/s</span> | <span class="result-value">1.00x</span> | <span class="result-value">1.00x</span> |
+| Block 8, [BEST3 serving stack](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts), Coral drafter | <span class="result-value">735 tok/s</span><br><span class="cell-note">95% CI: 718–750 tok/s</span> | <span class="result-value">635 tok/s</span><br><span class="cell-note">95% CI: 620–647 tok/s</span> | <span class="result-value">2.20x</span><br><span class="cell-note">95% CI: 2.14–2.25x</span> | <span class="result-value">1.99x</span><br><span class="cell-note">95% CI: 1.96–2.03x</span> |
+| Block 16 + [AVL](#adaptive-verification-length), [Run 2](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#run-2-and-run-6-artifacts) | <span class="result-value">937 tok/s</span><br><span class="cell-note">95% CI: 896–968 tok/s</span> | <span class="result-value">709 tok/s</span><br><span class="cell-note">95% CI: 686–721 tok/s</span> | <span class="result-value">2.80x</span><br><span class="cell-note">95% CI: 2.70–2.87x</span> | <span class="result-value">2.23x</span><br><span class="cell-note">95% CI: 2.17–2.27x</span> |
+| **Block 24 + [AVL](#adaptive-verification-length) + [L-skip](#attention-and-l-skip) + exact fixes, [Run 6](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#run-2-and-run-6-artifacts)** | <span class="result-value"><strong>975 tok/s</strong></span><br><span class="cell-note">95% CI: 932–1,003 tok/s</span> | <span class="result-value"><strong>717 tok/s</strong></span><br><span class="cell-note">95% CI: 691–748 tok/s</span> | <span class="result-value"><strong>2.91x</strong></span><br><span class="cell-note">95% CI: 2.81–2.99x</span> | <span class="result-value"><strong>2.25x</strong></span><br><span class="cell-note">95% CI: 2.19–2.34x</span> |
 
 {{table:final-results}} Reweighted median decode throughput. Confidence intervals use trace-clustered bootstrap resampling. <span class="tag meas">Measured, same turns and boot</span>
 
@@ -319,13 +354,15 @@ The thinking-on target of 700 tok/s was reached. The thinking-off headline rewei
 
 The result is not coming from one favorable prompt range. It remains above 2x in both response modes and all four context bins. The larger thinking-off gain is consistent with its higher acceptance: 12.15 tokens per round, compared with 8.55 when thinking is on. <span class="tag meas">Measured</span>
 
+The headline establishes the combined outcome. To understand which decisions produced it, the next view separates the cumulative milestones from the narrower same-boot comparisons.
+
 ## 12. Where the gains came from {#ablation}
 
 The independent benchmark is a cumulative progression, not a perfect factorial ablation. Each row changes both the drafter and parts of the serving stack. The paired engineering set supplies the narrower comparisons.
 
 | Change | Comparison | Thinking off | Thinking on | What moved |
 |---|---|---:|---:|---|
-| BEST3 + Coral DFlash2 | Block 8 vs stock, final set | 2.20x | 1.99x | Cheaper block drafting and the earlier exact serving stack |
+| [BEST3](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts) + Coral DFlash2 | Block 8 vs stock, final set | 2.20x | 1.99x | Cheaper block drafting and the earlier exact serving stack |
 | Run 2 block 16 + AVL | vs block 8, final set | 1.274x | 1.116x | More accepted tokens plus cost-aware verify length |
 | AVL alone | block 16 AVL vs block 16, hold128 | 1.042x geo | 1.086x geo | Less MoE and attention work on low-confidence tails |
 | L-skip alone | block 16 + AVL, hold128 | 1.016x geo | 1.004x geo | Fewer FlashInfer query tiles when `L` is short |
@@ -335,33 +372,59 @@ The independent benchmark is a cumulative progression, not a perfect factorial a
 
 The final increment is small compared with the jump from stock. That is expected. Block 24 accepts more tokens, but also performs a larger verify. The exact fixes make the trade favorable; they do not remove the cost.
 
+Those measurements support a compact decision record: each retained technique can be tied to the hypothesis it tested, the observed result, and the mechanism that explained it.
+
 ## 13. Decision summary {#mechanisms}
 
 | Technique | Hypothesis | Result | Mechanism |
 |---|---|---|---|
-| Teacher KL at block 16 | Preserve early accuracy while learning later positions | Kept block-8 behavior and improved block-16 acceptance | The frozen teacher constrained positions 1 through 7 |
-| AVL | Do not pay full MoE cost when the draft tail is unlikely to survive | +4.2% off and +8.6% on, paired geometric mean | Confidence chose `L`; remapping prevented unused rows from loading new expert weights |
-| Extra training recipes | Better data or loss would repair misses | Offline and server results stayed flat | Misses grew by draft position; parallel positions cannot observe earlier sampled tokens |
+| [Teacher–student distillation](#block-size-ceiling) at block 16 | Preserve early accuracy while learning later positions | Kept block-8 behavior and improved block-16 acceptance | KL divergence to the frozen block-8 teacher constrained positions 1 through 7 |
+| [AVL](#adaptive-verification-length) | Do not pay full MoE cost when the draft tail is unlikely to survive | +4.2% off and +8.6% on, paired geometric mean | Confidence chose `L`; remapping prevented unused rows from loading new expert weights |
+| [Extra training recipes](#drafter-training) | Better data or loss would repair misses | Offline and server results stayed flat | Misses grew by draft position; parallel positions cannot observe earlier sampled tokens |
 | Custom Triton attention | One larger query mapping would beat multiple FlashInfer tiles | 262.6 us vs 130.2 us at 101K | Resource pressure outweighed the tile-count advantage |
-| L-skip | Keep FlashInfer but omit query tiles beyond AVL's `L` | Faster isolated attention and about +1% server | It preserved the tuned CUDA kernel and changed only the plan |
-| Block 24 | Longer proposals would increase useful work per target pass | Won only after exact fixes | Acceptance rose, but Bole padding, split-K GEMMs and fallbacks first consumed the gain |
+| [L-skip](#attention-and-l-skip) | Keep FlashInfer but omit query tiles beyond AVL's `L` | Faster isolated attention and about +1% server | It preserved the tuned CUDA kernel and changed only the plan |
+| [Block 24](#block-24) | Longer proposals would increase useful work per target pass | Won only after exact fixes | Acceptance rose, but Bole padding, split-K GEMMs and fallbacks first consumed the gain |
 
 {{table:mechanisms}} The experiment logic in one view. <span class="tag meas">Measured</span>
+
+The decision record also makes ownership easier to state precisely. The final system combines published foundations, earlier serving work I adapted, and the training, policy, integration, and kernel work added in this campaign.
 
 ## 14. What I built and reused {#ownership}
 
 Speculative decoding, adaptive draft length, block diffusion, FlashInfer, Bole, and SGLang are established work. The result depends on all of them. I separate the upstream foundation from the training, policy, integration, and kernel work I added.
 
-| Category | Part of this stack |
-|---|---|
-| Upstream or published | SGLang 0.5.21; FlashInfer attention; Coral's DFlash2 checkpoint and selector design; Bole's recurrent-state method and SGLang integration |
-| Earlier work I adapted | Bole backport, sync-free planning, narrow FP8 GEMMs, exact `in_proj_ba`, 48K draft vocabulary, 8K draft context |
-| Built in this campaign | Run 2 and Run 6 training recipes; AVL's measured MoE objective and expert-row remapping; L-skip plan selection; M=24 dense extension; Bole tile/warp tuning; paired benchmark and correctness harness |
-| Not changed | Qwen3.6 target weights and formats; FP8 target; greedy acceptance rule |
+<div class="ownership-grid">
+<div class="ownership-card ownership-foundation">
+<p class="ownership-kicker">01 · Foundation</p>
+<h3>Upstream and published</h3>
+<p><a href="https://github.com/sgl-project/sglang">SGLang 0.5.21</a>, <a href="https://github.com/flashinfer-ai/flashinfer">FlashInfer attention</a>, Coral's <a href="https://www.coralbricks.ai/blog/speculative-decoding-qwen36">DFlash2 checkpoint and selector design</a>, and <a href="https://arxiv.org/abs/2608.01651">Bole's recurrent-state method</a> and <a href="https://github.com/sgl-project/sglang/pull/46702">SGLang integration</a>.</p>
+</div>
+<div class="ownership-card ownership-adapted">
+<p class="ownership-kicker">02 · Built earlier</p>
+<h3>The BEST3 serving baseline</h3>
+<p>My <a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#best3-baseline-artifacts">BEST3 stack</a>: narrow FP8 GEMMs and an <code>in_proj_ba</code> kernel that are bitwise equal to stock, sync-free attention planning, fused KV writes, and an offline chain evaluation that predicts server acceptance. Adapted from published work: the Bole backport, a 48K draft vocabulary, and an 8K draft context.</p>
+</div>
+<div class="ownership-card ownership-built">
+<p class="ownership-kicker">03 · Built here</p>
+<h3>Training, policy, kernels, and evaluation</h3>
+<p><a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding#run-2-and-run-6-artifacts">Run 2 and Run 6 training recipes</a>, <a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/q36/q37_nvtx.py">AVL's measured MoE objective, expert-row remapping, and L-skip selection</a>, the <a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/q36/s5_dense_exact.py">M=24 dense extension</a>, <a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/g7e/bole_repro2.py">Bole tile and warp tuning</a>, and the <a href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding/data">paired benchmark and correctness evidence</a>.</p>
+</div>
+<div class="ownership-card ownership-fixed">
+<p class="ownership-kicker">04 · Held fixed</p>
+<h3>The target contract</h3>
+<p>Qwen3.6 target weights and numeric formats, the FP8 target deployment, and the greedy acceptance rule.</p>
+</div>
+</div>
 
-{{table:ownership}} Provenance of the final stack. The external work is linked in [Evidence, code and references](#evidence-code-and-references).
+<p class="ownership-note"><strong>Provenance:</strong> upstream projects, papers, implementation files, and measurements are linked in <a href="#evidence-code-and-references">Evidence and code</a>.</p>
 
-Adaptive verification length builds on established dynamic speculation. My contribution is the combination of measured MoE cost, expert-row remapping, and fixed-graph device selection. L-skip is a focused integration technique that selects among FlashInfer plans instead of replacing its kernel.
+Three contributions are new to me in the prior work I reviewed:
+
+1. **[AVL](#adaptive-verification-length):** verification length priced by measured MoE cost, with unused rows remapped to existing experts inside a fixed CUDA graph.
+2. **[L-skip](#attention-and-l-skip):** per-round selection among FlashInfer plans on the device, so attention follows AVL's length while keeping FlashInfer's tuned kernel.
+3. **[Block extension by distillation](#block-size-ceiling):** growing a released drafter from 8 to 16 to 24 positions with the shorter-block model as a frozen teacher, plus the finding that untrained positions already add 7.6% offline.
+
+The kernel replacements and retunings (narrow FP8 GEMMs, `in_proj_ba`, the M=24 extension, and the Bole solve tuning) are each bitwise identical to the stock kernel they replace. With that provenance clear, the remaining question is whether the optimized execution path preserves the target's observable behavior.
 
 ## 15. Correctness {#correctness}
 
@@ -381,6 +444,8 @@ At the first divergence, the median target logit margin was 0.125 nats in the re
 
 The 512-turn benchmark stores output text, but I did not run target-only correctness over all 512 turns. I therefore keep the throughput and correctness claims separate.
 
+The correctness boundary defines what the performance result establishes. It also sets the boundary for further optimization: remaining work should preserve the same target representation and continue to report numerical divergence separately from throughput.
+
 ## 16. Remaining headroom {#stopping-rule}
 
 The remaining exact changes were a native 24-row Bole kernel, 24-row `in_proj_ba` and convolution paths, and work focused on the 32K to 64K context bin. From the measured kernel costs, I estimated 3% to 5% total headroom. <span class="tag est">Estimate</span>
@@ -395,11 +460,13 @@ The next experiments follow directly from the remaining evidence:
 2. Can the remaining native M=24 paths recover the estimated 3% to 5% without changing target numerics?
 3. Does AVL's policy transfer to other MoE routing distributions and GPUs when its cost curve is remeasured?
 
+These open questions follow from the measured bottlenecks rather than from an arbitrary feature list. The broader engineering lessons are the decision rules that survived the individual experiments.
+
 ## 17. Lessons {#lessons}
 
 **A full block is evidence.** If many rounds accept every available token, the current block is censoring the acceptance distribution. Measure that before changing the loss.
 
-**Preserve the part that works.** Run 1 learned new positions and damaged old ones. The teacher constraint made the larger block useful.
+**Preserve the part that works.** Run 1 learned new positions and damaged old ones. Teacher–student knowledge distillation preserved the useful early-position distribution while the student learned a larger block.
 
 **Price verification as well as drafting.** Block 16 initially gained acceptance while serving speed fell. AVL worked because its objective included measured target cost.
 
@@ -408,6 +475,8 @@ The next experiments follow directly from the remaining evidence:
 **Profile the new shape.** Block 24 crossed several hidden thresholds at once. The profiler turned a general regression into Bole padding, split-K reduction, a third attention tile, and small-kernel fallbacks.
 
 **Keep selection and evaluation disjoint.** The 128-turn set chose the stack. The 512-turn set judged it.
+
+Those lessons describe how I made decisions; the methodology below records the controls, exclusions, and operational mistakes needed to interpret the numbers.
 
 ## 18. Methodology {#methodology-notes}
 
@@ -425,6 +494,8 @@ I made and caught several process mistakes:
 
 The headline statistic is decode throughput in tok/s, not time to first token or end-to-end request latency. TTFT exists in the raw replay files but is not summarized in the curated data pack. I make no TTFT claim here.
 
+The final section links the compact evidence behind each stage of that story, from BEST3 and distillation through profiling, correctness, and the independent benchmark.
+
 ## 19. Evidence and code {#evidence-code-and-references}
 
 The repository keeps the compact evidence needed to audit the article:
@@ -438,6 +509,8 @@ The repository keeps the compact evidence needed to audit the article:
 - [`data/nsys_kernels.csv`](data/nsys_kernels.csv): Nsight Systems critical-path tables
 - [`data/scoreboard16.md`](data/scoreboard16.md): chronological engineering record
 - [`code/q36/q37_nvtx.py`](code/q36/q37_nvtx.py): AVL, L-skip, M=24 paths, Bole tuning, and planning hooks
+- [BEST3 artifact map](README.md#best3-baseline-artifacts): exact configuration, implementation, profiler, correctness, and benchmark files
+- [Run 2 and Run 6 artifact map](README.md#run-2-and-run-6-artifacts), [`code/q36/ft2_train.py`](code/q36/ft2_train.py), and [`code/q36/next_boot_s15.sh`](code/q36/next_boot_s15.sh): distillation recipes, training implementation, and the exact Run 6 launch recipe
 - [`code/q36/s5_kernels/`](code/q36/s5_kernels/): exact CUDA kernels used by the hook
 - [`code/q36/attn128.py`](code/q36/attn128.py): the Triton attention comparison
 - [`code/q36/run17.sh`](code/q36/run17.sh): final engineering-session orchestration
