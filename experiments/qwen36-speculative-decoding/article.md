@@ -5,11 +5,17 @@ The engineering challenge was to accept more draft tokens without making target 
 <div class="stat-grid">
 <div class="stat"><p class="stat-num">975 tok/s</p><p class="stat-label">Thinking off · 335 to 975 tok/s<br><strong>2.91x stock throughput</strong></p></div>
 <div class="stat"><p class="stat-num">717 tok/s</p><p class="stat-label">Thinking on · 319 to 717 tok/s<br><strong>2.25x stock throughput</strong></p></div>
-<div class="stat"><p class="stat-num">12.15 tok/round</p><p class="stat-label">Thinking off<br><strong>from 4.62 on stock</strong></p></div>
+<div class="stat"><p class="stat-num">12.15 accepted tok/round</p><p class="stat-label">Thinking off<br><strong>from 4.62 on stock</strong></p></div>
 </div>
 
-<div class="callout">
-<p><strong>What changed:</strong> the final stack proposes longer block-diffusion drafts, shortens expensive verification when confidence does not justify the work, and avoids specific block-24 dispatch fallbacks. Keeping the target weights and numeric formats unchanged isolates the headroom in drafting, verification, kernel execution, and serving orchestration.</p>
+<div class="callout key-highlights">
+<p><strong>Key highlights</strong></p>
+<ul>
+<li>Fine-tuned the DFlash2 drafter from 8 to 24 parallel positions while preserving its useful early-position distribution.</li>
+<li>Built AVL to choose verification length from draft confidence and measured MoE cost.</li>
+<li>Made FlashInfer attention follow that choice with L-skip, then tuned the exact M=24 execution paths exposed by profiling.</li>
+<li>Kept the target weights and numeric formats unchanged, isolating the throughput headroom in execution.</li>
+</ul>
 </div>
 
 <div class="definition-grid">
@@ -40,11 +46,11 @@ The engineering challenge was to accept more draft tokens without making target 
 
 ## 1. Goal and constraints {#the-goal}
 
-My objective was to maximize single-request decode throughput while preserving Qwen3.6's target weights and numeric formats. I had SGLang's CUDA-graph serving stack, Coral's block-diffusion drafter, a hybrid MoE and attention target, and one GPU. The core tradeoff was simple: a longer draft can commit more tokens per target pass, but every extra row also increases verification work.
+My objective was to maximize single-request decode throughput while preserving Qwen3.6's target weights and numeric formats. I had SGLang's CUDA-graph serving stack, Coral's block-diffusion drafter, and a hybrid MoE and attention target. The core tradeoff was simple: a longer draft can commit more tokens per target pass, but every extra row also increases verification work.
 
 In this article, block size is the maximum number of positions DFlash2 proposes in parallel. The verify step is the target pass that checks them, and accepted tokens per round is the prefix the target keeps before the next draft.
 
-I set engineering targets of at least 1,000 tokens per second with thinking off and 700 with thinking on, measured on agentic-coding turns rather than short synthetic prompts. <span class="tag meas">Measured target</span>
+I set engineering targets of at least 1,000 tok/s with thinking off and 700 tok/s with thinking on, measured on agentic-coding turns rather than short synthetic prompts. <span class="tag meas">Measured target</span>
 
 Coral's DFlash2 drafter predicts a block of positions in parallel and uses a selector lattice to choose a consistent candidate path. I started from Coral's block-8 checkpoint and its published [Qwen3.6 agent-serving study](https://www.coralbricks.ai/blog/speculative-decoding-qwen36). Coral reported 1.93x with thinking off and 1.70x with thinking on over its own stock baseline on an H100. Their result established the research direction; my measurements use different hardware, data splits, and an independent baseline, so I treat them as context rather than a controlled head-to-head comparison. <span class="tag meas">Published context</span>
 
@@ -59,7 +65,7 @@ Preserving the target kept its existing FP8 deployment configuration intact and 
 
 ## 2. Starting point {#what-i-started-with}
 
-The machine was an AWS g7e.2xlarge with one NVIDIA RTX PRO 6000 Blackwell Server Edition: 96 GB of memory, 188 streaming multiprocessors, and about 1.6 TB/s of memory bandwidth. <span class="tag meas">Measured setup</span>
+I began the early serving experiments on an NVIDIA L4, then moved the full Qwen3.6 study to one NVIDIA RTX PRO 6000 Blackwell Server Edition on AWS. The final GPU had 96 GB of memory, 188 streaming multiprocessors, and about 1.6 TB/s of memory bandwidth. <span class="tag meas">Measured setup</span>
 
 | Component | Configuration |
 |---|---|
@@ -68,24 +74,24 @@ The machine was an AWS g7e.2xlarge with one NVIDIA RTX PRO 6000 Blackwell Server
 | Attention | 16 query heads, 2 key/value heads, head dimension 256 |
 | Mixture of experts | 256 experts, top-8 routing |
 | Server | SGLang 0.5.21, FlashInfer attention, CUDA graphs, custom hook module |
-| Drafter | Coral DFlash2, 6 layers, trained at block size 8 |
+| Drafter | Fine-tuned Coral DFlash2, 6 layers; released checkpoint trained at block size 8 |
 | Workload | MLCommons agentic-coding traces, BS1 greedy, up to 1,024 output tokens |
 
 {{table:setup}} Experiment configuration. A mixture of experts, or MoE, routes each token row through only a subset of the model's experts. <span class="tag meas">Measured setup</span>
 
 The model is hybrid. Most layers use Gated DeltaNet, a recurrent linear-attention mechanism that carries state forward. Ten layers use full attention over the key/value cache. Speculative verification therefore has to manage both recurrent state and attention cache while routing each verified row through a mixture of experts.
 
-Earlier work had already produced an exact optimized baseline I call BEST3. It included a backport of [Bole](https://arxiv.org/abs/2608.01651) for linear-attention state, based on [SGLang pull request 46702](https://github.com/sgl-project/sglang/pull/46702); sync-free attention planning; narrow-tile FP8 matrix multiplications; an `in_proj_ba` kernel bitwise equal to stock; a 48K hot draft vocabulary; and an 8K drafter context window. <span class="tag meas">Measured baseline</span>
+Earlier work had already produced the exact optimized [BEST3 serving baseline](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/qwen36-speculative-decoding/code/q36). It included a backport of [Bole](https://arxiv.org/abs/2608.01651) for linear-attention state, based on [SGLang pull request 46702](https://github.com/sgl-project/sglang/pull/46702); sync-free attention planning; narrow-tile FP8 matrix multiplications; an `in_proj_ba` kernel bitwise equal to stock; a 48K hot draft vocabulary; and an 8K drafter context window. <span class="tag meas">Measured baseline</span>
 
-In the measurements below, batch size 1, or BS1, means one active request. Greedy decoding chooses the target's highest-scoring next token. Thinking off and thinking on are the model's two response modes; thinking on includes its reasoning segment before the tool-facing answer. An arm is one complete configuration of checkpoint, hook settings, kernels, and serving flags.
+In the measurements below, batch size 1, or BS1, means one active request. Greedy decoding chooses the target's highest-scoring next token. Thinking off and thinking on are the model's two response modes; thinking on includes its reasoning segment before the tool-facing answer. Each benchmark configuration fixes the checkpoint, hook settings, kernels, and serving flags.
 
-## 3. Measurement method {#measurement}
+## 3. Experimental setup and measurement {#measurement}
 
 The prompts came from MLCommons agentic-coding traces. They are histories from coding-agent sessions, including long context and tool traffic. I split them into four context bins: shorter than 32K tokens, 32K to 64K, 64K to 128K, and longer than 128K. <span class="tag meas">Measured dataset</span>
 
 Raw workload frequency is uneven across those bins. I therefore use a reweighted median: compute the distribution while restoring the original MLCommons bin weights of 2,614, 2,272, 5,852, and 5,039. Turns with fewer than 32 output tokens are excluded. This prevents one test sample's context mix from deciding the headline number. <span class="tag meas">Measured method</span>
 
-Every engineering comparison used paired turns and a control rerun on the same boot. A paired comparison means that both arms see the same requests. Confidence intervals come from 2,000 trace-clustered bootstrap replicates; clustering keeps turns from one underlying trace together when resampling. <span class="tag meas">Measured method</span>
+Every engineering comparison used paired turns and a control rerun on the same boot. A paired comparison means that both configurations see the same requests. Confidence intervals come from 2,000 trace-clustered bootstrap replicates; clustering keeps turns from one underlying trace together when resampling. <span class="tag meas">Measured method</span>
 
 I used two datasets for two different jobs:
 
@@ -96,7 +102,7 @@ I used two datasets for two different jobs:
 
 This separation became important because my first supposedly independent turn set shared traces with the training data. I discarded it, rebuilt the 128-turn engineering set, and later built the disjoint 512-turn final set. That cost time, but it removed a much larger credibility problem.
 
-For each arm I stored decode throughput, accepted tokens per round, round time, per-context results, and output text. Nsight Systems gave me the GPU critical path. Isolated kernel gates checked latency and numeric differences before a kernel was allowed into the server.
+For each configuration I stored decode throughput, accepted tokens per round, round time, per-context results, and output text. Nsight Systems gave me the GPU critical path. Isolated kernel gates checked latency and numeric differences before a kernel was allowed into the server.
 
 ## 4. Why block 8 was the ceiling {#block-size-ceiling}
 
@@ -117,9 +123,11 @@ That failure changed the objective. I needed to preserve the part of the drafter
 {{table:drafter-sweep}} Offline accepted tokens per round on held-out validation traces. The KL run preserved the early block while learning the later positions. <span class="tag meas">Measured</span>
 
 <figure>
-<img src="assets/drafter-blocks.svg" alt="Line chart of thinking-on tokens per round across draft block sizes for the Coral drafter, Run 1, and Run 2 with teacher KL. Run 2 reaches the best block-16 value while retaining its block-8 result.">
-<figcaption>{{figure:drafter-blocks}} The block sweep that led to Run 2</figcaption>
+<img src="assets/drafter-blocks.svg" alt="Line chart of thinking-on tokens per round across draft block sizes for Run 1 and Run 2 with teacher KL. A gray point marks the released block-8 checkpoint used as the starting point. Run 2 reaches the best block-16 value while retaining its block-8 result.">
+<figcaption>{{figure:drafter-blocks}} The released block-8 checkpoint is the starting point; the two lines show how my fine-tuning recipes behaved as the maximum block grew. Run 2 retained early-position accuracy while learning the added positions.</figcaption>
 </figure>
+
+Coral published its broader server study on an H100. The 6.58 / 5.41 values in the table are my local offline evaluation of its released drafter, while the server throughput results in this article come from the RTX PRO 6000 setup above. This keeps the published work as research context without treating different hardware and methods as a controlled comparison.
 
 The offline result justified a server test. Block 16 improved thinking-off throughput by 25%, but thinking-on was initially flat or negative because target verification became 2.2 ms more expensive per round. Acceptance had improved; verification cost had become the next bottleneck. <span class="tag meas">Measured</span>
 
@@ -171,7 +179,7 @@ The graph still has a fixed 16-row or 24-row tensor shape. In the [serving hook]
 <figcaption>{{figure:avl-lskip}} AVL and L-skip act on the same cutoff but remove different work: AVL limits new MoE expert loads, while L-skip removes attention tiles. L=8 is an illustrative round; the underlying graph remains M=24. <span class="tag theo">Illustrative</span></figcaption>
 </figure>
 
-On the 128-turn engineering set, AVL improved block 16 by 4.2% with thinking off and 8.6% with thinking on using paired geometric means. The thinking-on reweighted median reached 691 tokens per second, compared with 631 for block-8 BEST3. <span class="tag meas">Measured, same turns and boot</span>
+On the 128-turn engineering set, AVL improved block 16 by 4.2% with thinking off and 8.6% with thinking on using paired geometric means. The thinking-on reweighted median reached 691 tok/s, compared with 631 tok/s for block-8 BEST3. <span class="tag meas">Measured, same turns and boot</span>
 
 Dynamic speculation is established work. My implementation combines path confidence, a measured MoE cost curve, and expert-row remapping inside a fixed-shape graph; I have not found that exact combination in the prior work I reviewed.
 
@@ -229,6 +237,13 @@ Run 6 then trained at block 24 with a KL teacher from Run 2 at block 16. It reac
 
 The first server integration reduced throughput. Compared with block 16 + AVL, block 24 was 1.2% slower with thinking off and 6% slower with thinking on. The round was 1.9 ms longer. The additional accepted tokens were not yet paying for the new execution shape. <span class="tag meas">Measured, same turns and boot</span>
 
+<figure>
+<img src="assets/block24-overhead.svg" alt="Horizontal bars showing block-24 round-time overhead relative to block 16 plus AVL. The overhead falls from 1.90 milliseconds for plain block 24 to 1.56 after L-skip, then to 1.29 thinking off and 0.76 thinking on after the exact fixes.">
+<figcaption>{{figure:block24-overhead}} The measured progression from the initial block-24 regression to the final execution path. Each bar is additional round time relative to block 16 + AVL; shorter is better. <span class="tag meas">Measured</span></figcaption>
+</figure>
+
+<p class="read-guide"><strong>Read this figure from top to bottom:</strong> the longer block initially added 1.90 ms per round. L-skip recovered attention work first. The exact M=24 GEMM and Bole paths then reduced the remaining overhead, with the final value depending on the model's response mode.</p>
+
 <figure class="wide-flow">
 <img src="assets/block24-profile.svg" alt="Profiler map of the 1.90 millisecond block-24 round overhead. Separately measured components are Bole padding at 0.39 milliseconds and split-K dense GEMMs at 0.44 milliseconds. Nsight also shows a third attention query tile and row-count fallbacks without standalone timing attribution. Targeted fixes reduce the remaining overhead to 1.29 milliseconds off and 0.76 milliseconds on.">
 <figcaption>{{figure:block24-profile}} Nsight Systems turned the block-24 regression into four targeted causes. Only Bole and split-K were separately timed; the attention and fallback boxes are trace observations, not an additive timing breakdown. <span class="tag meas">Measured + trace</span></figcaption>
@@ -245,7 +260,7 @@ Nsight Systems showed why:
 
 I addressed each measured cause with the smallest compatible change. [L-skip](#attention-and-l-skip) handled the third attention tile when AVL chose a shorter `L`. I extended the [narrow dense FP8 GEMM path](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/q36/s5_dense_exact.py) through M=24 and verified bitwise equality to stock for M from 1 through 24. For [Bole's solve kernel](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/blob/main/experiments/qwen36-speculative-decoding/code/g7e/bole_repro2.py), a V tile of 8 and two warps reduced one-layer graph latency from 27.68 to 21.62 microseconds at T=24, again bitwise equal. <span class="tag meas">Measured</span>
 
-The block-24 overhead fell from 1.90 ms to 1.56 ms with L-skip, then to 1.29 ms with thinking off and 0.76 ms with thinking on after the exact fixes. On two separate boots, the best stack reached about 934 tokens per second off and 702.5 on over the 128-turn engineering set. <span class="tag meas">Measured, same-turn paired reproductions</span>
+The block-24 overhead fell from 1.90 ms to 1.56 ms with L-skip, then to 1.29 ms with thinking off and 0.76 ms with thinking on after the exact fixes. On two separate boots, the best stack reached about 934 tok/s off and 702.5 tok/s on over the 128-turn engineering set. <span class="tag meas">Measured, same-turn paired reproductions</span>
 
 Block 24 became useful after the execution path treated 24 rows as a tuned shape rather than a collection of fallbacks. That completed the causal chain from longer drafts to cost-aware verification, attention planning, and shape-specific kernel work.
 
@@ -270,14 +285,14 @@ One run deserves an operational note. A correctness script queried the live serv
 
 ## 11. Final results: 975 tok/s {#final-independent-benchmark}
 
-After the engineering stop, I ran every final arm sequentially on one boot over the 512-turn disjoint set. No turn in this set had been used for training, checkpoint selection, or configuration choice.
+After the engineering stop, I ran every final configuration sequentially on one boot over the 512-turn disjoint set. No turn in this set had been used for training, checkpoint selection, or configuration choice.
 
 <figure>
-<img src="assets/final-throughput.svg" alt="Grouped bar chart showing stock, block 8, block 16 with AVL, and block 24 with all fixes for thinking off and thinking on. Final throughput is 975 and 717 tokens per second, with 95 percent confidence intervals.">
+<img src="assets/final-throughput.svg" alt="Grouped bar chart showing stock, block 8, block 16 with AVL, and block 24 with all fixes for thinking off and thinking on. Final throughput is 975 and 717 tok/s, with 95 percent confidence intervals.">
 <figcaption>{{figure:final-throughput}} The independent benchmark separates the early block-8 result from the final block-24 stack; error bars show the trace-clustered 95% confidence interval.</figcaption>
 </figure>
 
-| Arm | Off tok/s, 95% CI | On tok/s, 95% CI | Off vs stock | On vs stock |
+| Configuration | Off tok/s, 95% CI | On tok/s, 95% CI | Off vs stock | On vs stock |
 |---|---:|---:|---:|---:|
 | Stock SGLang MTP-4 | 335, 329 to 340 | 319, 313 to 323 | 1.00x | 1.00x |
 | Block 8, BEST3, Coral drafter | 735, 718 to 750 | 635, 620 to 647 | 2.20x, 2.14 to 2.25 | 1.99x, 1.96 to 2.03 |
@@ -286,7 +301,7 @@ After the engineering stop, I ran every final arm sequentially on one boot over 
 
 {{table:final-results}} Reweighted median decode throughput. Confidence intervals use trace-clustered bootstrap resampling. <span class="tag meas">Measured, same turns and boot</span>
 
-The thinking-on target of 700 tokens per second was reached. The thinking-off headline reweighted median was 975, below the 1,000 target. The unweighted all-turn median was 1,001, and the shortest-context bin reached about 1,068 tokens per second. I report the reweighted 975 as the headline because it preserves the intended workload mix. <span class="tag meas">Measured</span>
+The thinking-on target of 700 tok/s was reached. The thinking-off headline reweighted median was 975 tok/s, below the 1,000 tok/s target. The unweighted all-turn median was 1,001 tok/s, and the shortest-context bin reached about 1,068 tok/s. I report the reweighted 975 tok/s as the headline because it preserves the intended workload mix. <span class="tag meas">Measured</span>
 
 <figure>
 <img src="assets/context-speedup.svg" alt="Grouped bar chart of final-stack speedup over stock across four context bins. Thinking-off speedup ranges from 2.68x to 3.05x and thinking-on from 2.14x to 2.27x.">
@@ -352,9 +367,9 @@ Adaptive verification length builds on established dynamic speculation. My contr
 
 Speculative decoding should preserve the target distribution in exact arithmetic. Real GPU kernels do not operate in exact arithmetic. A different verify shape changes reduction order, and near-tied logits can swap their top token.
 
-I compared each arm with target-only greedy decoding on 64 held-out turns per mode. "Identical" means the full generated output matched. The final block-24 arm matched 50 of 64 thinking-off outputs and 31 of 64 thinking-on outputs. Stock MTP-4 matched 44 of 64 off; its thinking-on run was partial at 18 of 34. Every tested arm produced zero malformed tool calls. <span class="tag meas">Measured</span>
+I compared each configuration with target-only greedy decoding on 64 held-out turns per mode. "Identical" means the full generated output matched. The final block-24 configuration matched 50 of 64 thinking-off outputs and 31 of 64 thinking-on outputs. Stock MTP-4 matched 44 of 64 off; its thinking-on run was partial at 18 of 34. Every tested configuration produced zero malformed tool calls. <span class="tag meas">Measured</span>
 
-| Arm | Off identical | On identical | Malformed tool calls |
+| Configuration | Off identical | On identical | Malformed tool calls |
 |---|---:|---:|---:|
 | Stock MTP-4 | 44 / 64 | 18 / 34, partial | 0 |
 | Block 16 + AVL | 46 / 64 | 31 / 64 | 0 |
@@ -362,7 +377,7 @@ I compared each arm with target-only greedy decoding on 64 held-out turns per mo
 
 {{table:correctness}} Agreement with target-only greedy decoding on the hold128 correctness subset. <span class="tag meas">Measured</span>
 
-At the first divergence, the median target logit margin was 0.125 nats in the recorded thinking-on comparisons. The target's own prefill could choose either near-tied token depending on shape. This is not bit identity, and I do not describe it as such. It is also not evidence that the final arm is less faithful than stock on this test. <span class="tag meas">Measured</span>
+At the first divergence, the median target logit margin was 0.125 nats in the recorded thinking-on comparisons. The target's own prefill could choose either near-tied token depending on shape. This is not bit identity, and I do not describe it as such. It is also not evidence that the final configuration is less faithful than stock on this test. <span class="tag meas">Measured</span>
 
 The 512-turn benchmark stores output text, but I did not run target-only correctness over all 512 turns. I therefore keep the throughput and correctness claims separate.
 
@@ -372,7 +387,7 @@ The remaining exact changes were a native 24-row Bole kernel, 24-row `in_proj_ba
 
 A 1,300-token-per-second result would require a larger reduction in bytes moved, such as FP4 experts or a lower-precision target head. Those changes violated the experiment's exact-target boundary, so I did not use them. <span class="tag est">Estimate from measured byte costs</span>
 
-My engineering stop rule was triggered when the reproduced best configuration remained below 960 tokens per second on the 128-turn set. It reproduced at 934 off and 702.5 on, so I stopped tuning and ran the independent benchmark. <span class="tag meas">Measured</span>
+My engineering stop rule was triggered when the reproduced best configuration remained below 960 tok/s on the 128-turn set. It reproduced at 934 tok/s off and 702.5 tok/s on, so I stopped tuning and ran the independent benchmark. <span class="tag meas">Measured</span>
 
 The next experiments follow directly from the remaining evidence:
 
@@ -396,7 +411,7 @@ The next experiments follow directly from the remaining evidence:
 
 ## 18. Methodology {#methodology-notes}
 
-The final benchmark used a single boot from November 11, 2026, with the stock, block-8, block-16, and block-24 arms run sequentially. The set contained 128 turns in each of four context bins. The raw number of usable thinking-off turns differed slightly by arm because turns with fewer than 32 generated tokens were excluded; thinking-on retained all 512. <span class="tag meas">Measured</span>
+The final benchmark used a single boot from November 11, 2026, with the stock, block-8, block-16, and block-24 configurations run sequentially. The set contained 128 turns in each of four context bins. The raw number of usable thinking-off turns differed slightly by configuration because turns with fewer than 32 generated tokens were excluded; thinking-on retained all 512. <span class="tag meas">Measured</span>
 
 I made and caught several process mistakes:
 
@@ -408,7 +423,7 @@ I made and caught several process mistakes:
 
 <span class="tag meas">Recorded process</span>
 
-The headline statistic is decode tokens per second, not time to first token or end-to-end request latency. TTFT exists in the raw replay files but is not summarized in the curated data pack. I make no TTFT claim here.
+The headline statistic is decode throughput in tok/s, not time to first token or end-to-end request latency. TTFT exists in the raw replay files but is not summarized in the curated data pack. I make no TTFT claim here.
 
 ## 19. Evidence and code {#evidence-code-and-references}
 

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="520" viewBox="0 0 1000 520" role="img" aria-labelledby="title desc">
+<title id="title">How the block-24 overhead came down</title><desc id="desc">Additional round time relative to block 16 + AVL on the 128-turn engineering set</desc>
+<rect width="1000" height="520" rx="18" fill="#ffffff"/>
+<text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">How the block-24 overhead came down</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">Additional round time relative to block 16 + AVL on the 128-turn engineering set</text>
+<line x1="315.0" y1="112" x2="315.0" y2="424" stroke="#e6e8e3"/>
+<text x="315.0" y="454" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">0.0</text>
+<line x1="468.8" y1="112" x2="468.8" y2="424" stroke="#e6e8e3"/>
+<text x="468.8" y="454" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">0.5</text>
+<line x1="622.5" y1="112" x2="622.5" y2="424" stroke="#e6e8e3"/>
+<text x="622.5" y="454" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">1.0</text>
+<line x1="776.2" y1="112" x2="776.2" y2="424" stroke="#e6e8e3"/>
+<text x="776.2" y="454" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">1.5</text>
+<line x1="930.0" y1="112" x2="930.0" y2="424" stroke="#e6e8e3"/>
+<text x="930.0" y="454" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="14">2.0</text>
+<text x="297" y="159" text-anchor="end" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="650">Plain block 24</text>
+<rect x="315" y="135" width="584.2" height="36" rx="6" fill="#7f8d93"/>
+<text x="911.2" y="159" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="700">+1.90 ms</text>
+<text x="297" y="235" text-anchor="end" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="650">After L-skip</text>
+<rect x="315" y="211" width="479.7" height="36" rx="6" fill="#78aaa1"/>
+<text x="806.7" y="235" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="700">+1.56 ms</text>
+<text x="297" y="311" text-anchor="end" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="650">After exact fixes, off</text>
+<rect x="315" y="287" width="396.7" height="36" rx="6" fill="#126c60"/>
+<text x="723.7" y="311" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="700">+1.29 ms</text>
+<text x="297" y="387" text-anchor="end" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="650">After exact fixes, on</text>
+<rect x="315" y="363" width="233.7" height="36" rx="6" fill="#126c60"/>
+<text x="560.7" y="387" fill="#1e2b34" font-family="system-ui" font-size="16" font-weight="700">+0.76 ms</text>
+<text x="622.5" y="486" text-anchor="middle" fill="#60717a" font-family="system-ui" font-size="15">Additional milliseconds per speculative round · lower is better</text>
+</svg>

@@ -30,7 +30,7 @@
         <div class="grid">
           <article class="card"><span class="tag">CUDA kernel</span><h3>Small-M fused-add RMSNorm</h3><p>Testing a one-row-per-block mapping for Gemma RMSNorm and locating the shapes where additional parallelism helps.</p><a class="open" href="experiments/rmsnorm/">Read the experiment</a></article>
           <article class="card"><span class="tag">Model serving</span><h3>Speculative decoding on an 8 GB GPU</h3><p>Following SGLang's speculative round to its CUDA kernels, then reducing draft cost and improving verification parallelism.</p><a class="open" href="experiments/speculative-decoding/">Read the experiment</a></article>
-          <article class="card"><span class="tag">Agent inference</span><h3>975 tok/s Qwen3.6 speculative decoding</h3><p>Scaling parallel drafts beyond eight tokens, pricing MoE verification, and removing block-24 fallbacks on one RTX PRO 6000.</p><a class="open" href="experiments/qwen36-speculative-decoding/">Read the experiment</a></article>
+          <article class="card"><span class="tag">Agent inference</span><h3>Optimizing Qwen3.6 speculative decoding</h3><p>From 335 to 975 tok/s through longer parallel drafts, cost-aware verification, and exact block-24 fixes.</p><a class="open" href="experiments/qwen36-speculative-decoding/">Read the experiment</a></article>
         </div>
       </section>
     </main>

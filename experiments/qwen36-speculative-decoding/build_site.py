@@ -10,9 +10,9 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 
 ROOT = Path(__file__).parent
-TITLE = "975 tok/s on One GPU: Optimizing Qwen3.6 Speculative Decoding"
+TITLE = "Optimizing Qwen3.6 Speculative Decoding: 975 tok/s on One RTX PRO 6000"
 SUBTITLE = "Block diffusion, cost-aware verification, and exact kernel fixes on an RTX PRO 6000."
-DESCRIPTION = "A measured path from stock SGLang to 975 tokens per second for Qwen3.6-35B-A3B-FP8 on one RTX PRO 6000."
+DESCRIPTION = "A measured path from stock SGLang to 975 tok/s for Qwen3.6-35B-A3B-FP8 on one RTX PRO 6000."
 DATE = "November 11, 2026"
 
 FMT = HtmlFormatter(nowrap=True)

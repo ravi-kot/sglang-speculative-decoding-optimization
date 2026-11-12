@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
-<title id="title">How one speculative round works</title><desc id="desc">One request on one GPU; the Qwen3.6 target weights and numeric formats remain unchanged</desc>
+<title id="title">How one speculative round works</title><desc id="desc">One request; the Qwen3.6 target weights and numeric formats remain unchanged</desc>
 <rect width="1120" height="520" rx="18" fill="#ffffff"/>
 <text x="56" y="58" fill="#1e2b34" font-family="system-ui,sans-serif" font-size="27" font-weight="700">How one speculative round works</text>
-<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">One request on one GPU; the Qwen3.6 target weights and numeric formats remain unchanged</text>
+<text x="56" y="84" fill="#60717a" font-family="system-ui,sans-serif" font-size="15">One request; the Qwen3.6 target weights and numeric formats remain unchanged</text>
 <defs><marker id="overview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#60717a"/></marker></defs>
 <rect x="40" y="130" width="245" height="205" rx="14" fill="#fafbf9" stroke="#e6e8e3" stroke-width="2"/>
 <circle cx="70" cy="161" r="17" fill="#7f8d93"/>

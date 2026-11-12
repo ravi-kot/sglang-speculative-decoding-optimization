@@ -1,4 +1,4 @@
-# 975 tok/s on One GPU: Optimizing Qwen3.6 Speculative Decoding
+# Optimizing Qwen3.6 Speculative Decoding: 975 tok/s on One RTX PRO 6000
 
 This experiment follows a batch-size-1 SGLang speculative-decoding stack from stock MTP-4 to a block-diffusion drafter with adaptive verification and exact kernel fixes. The target remains Qwen3.6-35B-A3B-FP8.
 

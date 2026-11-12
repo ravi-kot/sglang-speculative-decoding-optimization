@@ -81,6 +81,8 @@ h3 { font: 650 1.08rem/1.4 var(--sans); margin: 2.2rem 0 0.7rem; scroll-margin-t
 .callout { background: #eef3ef; border: 1px solid #dde6df; border-radius: 12px; padding: 16px 22px; margin: 0 0 1rem; }
 .callout p { margin: 0; color: var(--ink-2); }
 .callout strong { color: var(--ink); }
+.key-highlights ul { margin: 0.65rem 0 0; padding-left: 1.2rem; color: var(--ink-2); }
+.key-highlights li { margin-bottom: 0.3rem; }
 .definition-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 1rem; }
 .definition-card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
 .definition-card p { margin: 0; font-size: 0.84rem; line-height: 1.6; color: var(--ink-2); }

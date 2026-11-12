@@ -125,7 +125,12 @@ def drafter_blocks():
         y = bottom - (tick - 5) / 2.2 * chart_h
         p += [f'<line x1="{left}" y1="{y:.1f}" x2="950" y2="{y:.1f}" stroke="{GRID}"/>',
               f'<text x="82" y="{y+5:.1f}" text-anchor="end" fill="{MUTED}" font-family="system-ui" font-size="14">{tick:.1f}</text>']
-    styles = [("Coral (eval only)", SLATE, "Coral"), ("Run 1", TEAL_2, "Run 1"), ("Run 2", TEAL, "Run 2 + KL")]
+    styles = [("Run 1", TEAL_2, "Run 1"), ("Run 2", TEAL, "Run 2 + KL")]
+    start = selected["Coral (eval only)"][8]
+    start_x = left
+    start_y = bottom - (start - 5) / 2.2 * chart_h
+    p.append(f'<circle cx="{start_x:.1f}" cy="{start_y:.1f}" r="7" fill="{PAPER}" stroke="{SLATE}" stroke-width="3"><title>Released block-8 start: {start:.2f}</title></circle>')
+    p.append(f'<text x="{start_x+12:.1f}" y="{start_y-13:.1f}" fill="{SLATE}" font-family="system-ui" font-size="13" font-weight="700">Released start</text>')
     for name, color, label in styles:
         points = []
         for block in sorted(selected.get(name, {})):
@@ -142,7 +147,7 @@ def drafter_blocks():
         p.append(f'<text x="{x:.1f}" y="493" text-anchor="middle" fill="{INK}" font-family="system-ui" font-size="15">{block}</text>')
     p.append(f'<text x="510" y="525" text-anchor="middle" fill="{MUTED}" font-family="system-ui" font-size="15">Maximum draft block</text>')
     for i, (_, color, label) in enumerate(styles):
-        x = 620 + i * 112
+        x = 708 + i * 120
         p += [f'<line x1="{x}" y1="108" x2="{x+24}" y2="108" stroke="{color}" stroke-width="4"/>',
               f'<text x="{x+31}" y="113" fill="{INK}" font-family="system-ui" font-size="13">{label}</text>']
     finish(p, ASSETS / "drafter-blocks.svg")
@@ -181,7 +186,7 @@ def avl_cost():
 def system_overview():
     p = shell(
         "How one speculative round works",
-        "One request on one GPU; the Qwen3.6 target weights and numeric formats remain unchanged",
+        "One request; the Qwen3.6 target weights and numeric formats remain unchanged",
         1120,
         520,
     )
@@ -253,6 +258,35 @@ def avl_lskip_flow():
     finish(p, ASSETS / "avl-lskip-flow.svg")
 
 
+def block24_overhead():
+    p = shell(
+        "How the block-24 overhead came down",
+        "Additional round time relative to block 16 + AVL on the 128-turn engineering set",
+        1000,
+        520,
+    )
+    left, right = 315, 930
+    top, row_gap = 135, 76
+    rows = [
+        ("Plain block 24", 1.90, SLATE),
+        ("After L-skip", 1.56, TEAL_2),
+        ("After exact fixes, off", 1.29, TEAL),
+        ("After exact fixes, on", 0.76, TEAL),
+    ]
+    for tick in (0, 0.5, 1.0, 1.5, 2.0):
+        x = left + tick / 2.0 * (right - left)
+        p.append(f'<line x1="{x:.1f}" y1="112" x2="{x:.1f}" y2="424" stroke="{GRID}"/>')
+        p.append(f'<text x="{x:.1f}" y="454" text-anchor="middle" fill="{MUTED}" font-family="system-ui" font-size="14">{tick:.1f}</text>')
+    for i, (label, value, color) in enumerate(rows):
+        y = top + i * row_gap
+        width = value / 2.0 * (right - left)
+        p.append(f'<text x="{left-18}" y="{y+24}" text-anchor="end" fill="{INK}" font-family="system-ui" font-size="16" font-weight="650">{escape(label)}</text>')
+        p.append(f'<rect x="{left}" y="{y}" width="{width:.1f}" height="36" rx="6" fill="{color}"/>')
+        p.append(f'<text x="{left+width+12:.1f}" y="{y+24}" fill="{INK}" font-family="system-ui" font-size="16" font-weight="700">+{value:.2f} ms</text>')
+    p.append(f'<text x="{(left+right)/2:.1f}" y="486" text-anchor="middle" fill="{MUTED}" font-family="system-ui" font-size="15">Additional milliseconds per speculative round · lower is better</text>')
+    finish(p, ASSETS / "block24-overhead.svg")
+
+
 def block24_profile():
     p = shell(
         "Why block 24 regressed before the fixes",
@@ -293,6 +327,7 @@ if __name__ == "__main__":
     avl_cost()
     system_overview()
     avl_lskip_flow()
+    block24_overhead()
     block24_profile()
-    print("generated 7 SVG figures")
+    print("generated 8 SVG figures")
 
