@@ -3,7 +3,7 @@
 **A small CUDA block-mapping change, measured from one kernel to a real SGLang model**  
 Ravi Kothari · October 21, 2026 · RTX 5070 Laptop (SM120) · BF16 · H=2048
 
-**Live article:** [ravi-kot.github.io/flashinfer-small-m-rmsnorm](https://ravi-kot.github.io/flashinfer-small-m-rmsnorm/)
+**Live article:** [RMSNorm experiment](https://ravi-kot.github.io/sglang-speculative-decoding-optimization/experiments/rmsnorm/)
 
 | Best isolated result | Best in-model norm result | Correctness |
 | :--- | :--- | :--- |

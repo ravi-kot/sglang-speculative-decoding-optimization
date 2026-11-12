@@ -3,8 +3,8 @@
 **A kernel-to-serving investigation of SGLang NEXTN decoding on an 8 GB GPU**  
 Ravi Kothari · October 2026 · RTX 5070 Laptop (SM120) · SGLang 0.5.21 · Qwen3.5-2B BF16
 
-**Live article:** [ravi-kot.github.io/sglang-speculative-decoding-optimization](https://ravi-kot.github.io/sglang-speculative-decoding-optimization/)  
-**Repository:** [ravi-kot/sglang-speculative-decoding-optimization](https://github.com/ravi-kot/sglang-speculative-decoding-optimization)
+**Live article:** [Speculative decoding experiment](https://ravi-kot.github.io/sglang-speculative-decoding-optimization/experiments/speculative-decoding/)  
+**Repository:** [Experiment files](https://github.com/ravi-kot/sglang-speculative-decoding-optimization/tree/main/experiments/speculative-decoding)
 
 | Code 1K | Code 4K | MT-Bench |
 | :--- | :--- | :--- |

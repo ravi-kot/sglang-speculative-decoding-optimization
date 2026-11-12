@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Reproducible SGLang GPU inference experiments by Ravi Kothari.">
+  <title>SGLang Inference Experiments · Ravi Kothari</title>
+  <style>
+    :root{--ink:#102a43;--muted:#627d98;--paper:#fbfaf7;--card:#fff;--line:#d9e2ec;--accent:#147d73;--soft:#e7f4f1}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+    a{color:var(--accent)}.wrap{width:min(100% - 36px,1050px);margin:auto}.top{display:flex;justify-content:space-between;align-items:center;padding:24px 0;border-bottom:1px solid var(--line)}
+    .brand{font-weight:750;text-decoration:none;color:var(--ink)}.repo{font-size:.9rem}.hero{padding:76px 0 52px;max-width:820px}.eyebrow{color:var(--accent);font-weight:750;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem}
+    h1{font-size:clamp(2.25rem,7vw,4.5rem);line-height:1.05;letter-spacing:-.045em;margin:.25em 0}.lede{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--muted);max-width:720px}
+    h2{font-size:1.6rem;margin:0 0 20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;padding-bottom:80px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 12px 32px rgba(16,42,67,.05)}
+    .card h3{font-size:1.35rem;line-height:1.25;margin:8px 0}.card p{color:var(--muted);margin:0 0 22px}.tag{display:inline-block;background:var(--soft);color:var(--accent);padding:4px 10px;border-radius:999px;font-size:.78rem;font-weight:700}.open{font-weight:700;text-decoration:none}.open:hover{text-decoration:underline}
+    footer{border-top:1px solid var(--line);padding:25px 0 40px;color:var(--muted);font-size:.9rem}@media(max-width:650px){.grid{grid-template-columns:1fr}.hero{padding-top:52px}.repo{display:none}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top"><a class="brand" href="./">Ravi Kothari / Research Notes</a><a class="repo" href="https://github.com/ravi-kot/sglang-speculative-decoding-optimization">GitHub repository</a></header>
+    <main>
+      <section class="hero">
+        <div class="eyebrow">GPU inference engineering</div>
+        <h1>SGLang inference experiments</h1>
+        <p class="lede">Reproducible investigations into CUDA kernels and model-serving bottlenecks, with the code, measurements, profiler evidence, and limitations kept beside each write-up.</p>
+      </section>
+      <section aria-labelledby="experiments-title">
+        <h2 id="experiments-title">Experiments</h2>
+        <div class="grid">
+          <article class="card"><span class="tag">CUDA kernel</span><h3>Small-M fused-add RMSNorm</h3><p>Testing a one-row-per-block mapping for Gemma RMSNorm and locating the shapes where additional parallelism helps.</p><a class="open" href="experiments/rmsnorm/">Read the experiment</a></article>
+          <article class="card"><span class="tag">Model serving</span><h3>Speculative decoding on an 8 GB GPU</h3><p>Following SGLang's speculative round to its CUDA kernels, then reducing draft cost and improving verification parallelism.</p><a class="open" href="experiments/speculative-decoding/">Read the experiment</a></article>
+        </div>
+      </section>
+    </main>
+    <footer>Experiments by Ravi Kothari.</footer>
+  </div>
+</body>
+</html>
